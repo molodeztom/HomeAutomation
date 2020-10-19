@@ -1,0 +1,18 @@
+{
+  "Version": "0.2.0.0",
+  "TimeFormat": "hh:mm:ss tt",
+  "DateFormat": "M/dd/yyyy",
+  "AllowUntrustedSsl": false,
+  "Connections": [
+    {
+      "Id": "5cdfbaab-a879-480d-9eab-1545bea83810",
+      "Name": "New Connection",
+      "Host": "192.168.178.53",
+      "Port": 8086,
+      "Database": "",
+      "Username": "",
+      "Password": "",
+      "UseSsl": false
+    }
+  ]
+}
