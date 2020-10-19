@@ -23,6 +23,7 @@
  20200428   V1.7  Test mit weiterem Sensor 4 um den Sensor Eingang für PCB V1.3 zu prüfen
  20200428   V1.8  2. Sensor daneben und aktiviert für vergleich
  20200522   V1.9  Converted to platformio, DEBUG with pre-compiler settings
+ 20201019   V1.10 Samples for passwords secrets added
  
  
  */
@@ -46,8 +47,16 @@ extern "C"
 }
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
 #include "D:\Arduino\HomeAutomationSecrets.h"
+/* ADD YOUR OWN VALUES IF YOU WANT TO USE THIS PROJEKT****************************************************************************
 
-const String sSoftware = "WLANThermoEXT V1.9";
+const char *WIFI_SSID = ""
+const char *WIFI_PWD = "";
+//SSID provided by AP for some time. Sensor can contact and transfer MAC adress.
+const char *APSSID = "";
+
+*/
+
+const String sSoftware = "WLANThermoEXT V1.10";
 
 //Konstanten für WiFi
 #define WIFI_CHANNEL 1

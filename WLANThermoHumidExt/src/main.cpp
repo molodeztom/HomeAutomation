@@ -21,6 +21,7 @@
  20200524   V0.9:   Removed some unneeded Debug prints
  20200628   V1.0:   Temp Sens correction 
  20201019   V1.1:   Include DHT_U problem with PIO 5
+ 20201019   V1.2:   Password sample
 */
 
 #include <Arduino.h>
@@ -48,8 +49,16 @@ extern "C"
 }
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
 #include "D:\Arduino\HomeAutomationSecrets.h"
+/* ADD YOUR OWN VALUES IF YOU WANT TO USE THIS PROJEKT****************************************************************************
 
-const String sSoftware = "WLANThermoHumiEXT V0.8";
+const char *WIFI_SSID = ""
+const char *WIFI_PWD = "";
+//SSID provided by AP for some time. Sensor can contact and transfer MAC adress.
+const char *APSSID = "";
+
+*/
+
+const String sSoftware = "WLANThermoHumiEXT V1.2";
 
 //Konstanten für WiFi
 #define WIFI_CHANNEL 1
