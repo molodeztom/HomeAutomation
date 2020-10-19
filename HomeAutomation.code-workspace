@@ -12,6 +12,9 @@
 		},
 		{
 			"path": "WLANThermoExt"
+		},
+		{
+			"path": "ValveControl"
 		}
 	],
 	"settings": {}

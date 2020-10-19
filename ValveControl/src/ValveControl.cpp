@@ -27,12 +27,11 @@ Home Automation Project
   
 
 
-/**************************************************************************/
+**************************************************************************/
 
+#include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_MCP4725.h>
-#include <ESPWiFi.h>
-#include <ESPHTTPClient.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h> //MQTT
 
@@ -87,6 +86,10 @@ int iMCP4725Adr = 0x60;
 int iMCPMaxCode = 4096; //code for max output
 float fVFact = 10.1; // 4095 volts per digit
 int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
+
+
+void wifiConnectStation();
+void mQTTConnect();
 
 
 void setup(void) {
