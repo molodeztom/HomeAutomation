@@ -53,6 +53,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20200627  V1.4   Add Sensor #5
 20020627  V1.5    Remove Local Temp and Humi is incorrect anyway
 20200628  V1.6    Remove old dht code
+1010^0^9  V1.7    Converted to visual studio code project
 
  */
 
@@ -79,7 +80,7 @@ extern "C"
 {
 #include <espnow.h>
 }
-const String sSoftware = "WeatherStation V1.4";
+const String sSoftware = "WeatherStation V1.7";
 #include <SoftwareSerial.h>
 #include <Adafruit_BMP085.h>
 

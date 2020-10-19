@@ -22,6 +22,7 @@ Home Automation Project
   20200404  V0.8: Add get ntp time 
   20200405  V0.9: NTP Time optimized 
   20200406  V0.10: Update Time display more often
+  20201019  V0.11: converted to visual studio code
 */
 
 #include <Arduino.h>

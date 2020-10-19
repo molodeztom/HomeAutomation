@@ -23,6 +23,7 @@ Home Automation Project
   20200509  V0.1: Copy from Adafruit example for MCP4725A1
   20200510  V0.2: Output 3 fixed values to test valve behaviour
   20200510  V0.3: Get SetPoint as MCP digits from MQTT as int and set valve accordingly
+  20201019  V0.4: Converted to visual studio code project
   
   
 
