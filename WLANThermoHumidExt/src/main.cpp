@@ -20,6 +20,7 @@
  20200523   V0.8:   Converted to platformio, DEBUG with pre-compiler
  20200524   V0.9:   Removed some unneeded Debug prints
  20200628   V1.0:   Temp Sens correction 
+ 20201019   V1.1:   Include DHT_U problem with PIO 5
 */
 
 #include <Arduino.h>
