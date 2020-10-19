@@ -208,8 +208,8 @@ void loop(void) {
    //TODO Remove after debug LED Blink
    //LED is set on when client.loop called
    //every 500 ms LED is set off id loop never called will stay dark
-   static unsigned long previousMillis = 0; //for blink
-   const unsigned long ledInterval = 500; 
+   //static unsigned long previousMillis = 0; //for blink
+   //const unsigned long ledInterval = 500; 
    ui.update();
   // Get Time from NTP
   if((unsigned long)(millis() - lRetrieveNTPTime) > ulRetrieveNTP)
@@ -322,7 +322,7 @@ void callback(char* topic, byte* data, unsigned int dataLength) {
       localtime_r(&now, &timeInfo);
       Serial.print(".");
       delay(10);
-    } while (((millis() - start) <= (1000 * sec)) && (timeInfo.tm_year < (2016 - 1900)));
+    } while (((millis() - start) <= ((uint)1000 * sec)) && (timeInfo.tm_year < (2016 - 1900)));
     if (timeInfo.tm_year <= (2016 - 1900)) {
       Serial.println("NTP get Call not successful");
       return false;  // the NTP call was not successful
