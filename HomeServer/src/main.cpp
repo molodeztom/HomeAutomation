@@ -39,7 +39,7 @@
   20200604  V1.3:   Serial read to end then give back control to main
   20200627  V1.4:   5. Sensor receive added
   20200628  V1.5:   DHT 11 from local sensor removed
-  20201910  V1.6:   Include HomeAutomationCommon
+  20201910  V1.6:   Include HomeAutomationCommon Test
       
 */
 #include <Arduino.h>

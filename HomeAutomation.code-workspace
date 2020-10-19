@@ -1,19 +1,11 @@
 {
 	"folders": [
 		{
-			"name": "WLANThermoExt",
-			"path": "..\\..\\Arduino\\HomeAutomation\\WLANThermoExt"
-		},
-		{
-			"name": "HomeServer",
-			"path": "..\\..\\Arduino\\HomeAutomation\\HomeServer"
-		},
-		{
 			"name": "Tasmota",
 			"path": "..\\..\\Arduino\\Tasmota\\Tasmota"
 		},
 		{
-			"path": "..\\..\\Arduino\\HomeAutomation\\WLANThermoHumidExt"
+			"path": "HomeServer"
 		}
 	],
 	"settings": {}
