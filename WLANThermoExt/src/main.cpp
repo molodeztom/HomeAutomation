@@ -23,7 +23,7 @@
  20200428   V1.7  Test mit weiterem Sensor 4 um den Sensor Eingang für PCB V1.3 zu prüfen
  20200428   V1.8  2. Sensor daneben und aktiviert für vergleich
  20200522   V1.9  Converted to platformio, DEBUG with pre-compiler settings
- 20201019   V1.10 Samples for passwords secrets added
+ 20201019   V1.10 Samples for passwords secrets added TEST
  
  
  */

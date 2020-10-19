@@ -6,6 +6,12 @@
 		},
 		{
 			"path": "HomeServer"
+		},
+		{
+			"path": "WLANThermoHumidExt"
+		},
+		{
+			"path": "WLANThermoExt"
 		}
 	],
 	"settings": {}
