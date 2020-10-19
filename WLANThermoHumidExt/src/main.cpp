@@ -36,8 +36,10 @@
 //Bibliothek für ESP Now
 #include <DallasTemperature.h>
 
-//Bibliothek für DHT-22
-#include "DHT.h"
+//Bibliothek für DHT-22 Nachträglich DHT_U.h hinzugefügt 
+//https://community.platformio.org/t/library-dependency-problem-related-to-core-5-0/15726/3
+#include <DHT_U.h>
+//#include "DHT.h"
 
 extern "C"
 {
