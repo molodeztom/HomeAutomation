@@ -23,20 +23,21 @@ Home Automation Project
   20200405  V0.9: NTP Time optimized 
   20200406  V0.10: Update Time display more often
 */
-#include <ESPWiFi.h>
-#include <ESPHTTPClient.h>
+
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
 #include <Time.h>                       // time() ctime()
 //#include <sys/time.h>
-
+#include "Spi.h"
 #include "SSD1306Wire.h"
 #include "OLEDDisplayUi.h"
 #include "Wire.h"
 
 #include "WeatherStationFonts.h"
 #include "WeatherStationImages.h"
-#include <ESP8266WiFi.h>
 #include <PubSubClient.h> //MQTT
 
+//#include "D:\Arduino\HomeAutomation\HomeAutomationCommon.h"
 
 
 /***************************
@@ -111,11 +112,15 @@ const int SDC_PIN = GPIO2
  SSD1306Wire     display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
  OLEDDisplayUi   ui( &display );
 
-//declaring prototypes for display
+//declaring prototypes 
 void drawProgress(OLEDDisplay *display, int percentage, String label);
 void drawTempExtA(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawHumi(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y);
 void drawHeaderOverlay(OLEDDisplay *display, OLEDDisplayUiState* state);
+void wifiConnectStation();
+void mQTTConnect();
+bool getNTPtime(int sec);
+void showTime(tm localTime);
 
 // Add frames
 // this array keeps function pointers to all frames

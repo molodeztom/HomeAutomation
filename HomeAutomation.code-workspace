@@ -15,6 +15,14 @@
 		},
 		{
 			"path": "ValveControl"
+		},
+		{
+			"name": "RemoteDisplay",
+			"path": "RemoteDisplay"
+		},
+		{
+			"name": "WeatherStation",
+			"path": "WeatherStation"
 		}
 	],
 	"settings": {}
