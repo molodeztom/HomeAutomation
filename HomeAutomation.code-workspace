@@ -23,6 +23,14 @@
 		{
 			"name": "WeatherStation",
 			"path": "WeatherStation"
+		},
+		{
+			"name": "CurrentMeasurement",
+			"path": "CurrentMeasurement"
+		},
+		{
+			"name": "CurrentMeasurement",
+			"path": "CurrentMeasurement"
 		}
 	],
 	"settings": {}
