@@ -34,15 +34,16 @@ Home Automation Project
 I2CScanner scanner;
 
 //if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them	
-#define SDA_PIN 2
-#define SCL_PIN 1
+// use Pin Numbers from GPIO e.g. GPIO4 = 4
+#define SDA_PIN 4
+#define SCL_PIN 5
 
 void setup() 
 {	
 	//uncomment the next line if you use custom sda and scl pins for example with ESP8266-01 (sda = 4, scl = 5)
 	Wire.begin(SDA_PIN, SCL_PIN);
 	
-	Serial.begin(57600);
+	Serial.begin(9600);
 	while (!Serial) {};
 
 	scanner.Init();
