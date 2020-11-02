@@ -1,10 +1,6 @@
 {
 	"folders": [
 		{
-			"name": "Tasmota",
-			"path": "..\\..\\Arduino\\Tasmota\\Tasmota"
-		},
-		{
 			"path": "HomeServer"
 		},
 		{
