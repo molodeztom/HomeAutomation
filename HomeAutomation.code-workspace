@@ -29,8 +29,8 @@
 			"path": "CurrentMeasurement"
 		},
 		{
-			"name": "CurrentMeasurement",
-			"path": "CurrentMeasurement"
+			"name": "I2CScanner",
+			"path": "I2CScanner"
 		}
 	],
 	"settings": {}
