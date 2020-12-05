@@ -31,26 +31,22 @@ Home Automation Project
 **************************************************************************/
 
 #include <Arduino.h>
+#define DEBUG
 #include <Wire.h>
 #include <Adafruit_MCP4725.h>
 #include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
 #include <PubSubClient.h> //MQTT
+#include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-/***************************
- * WIFI Settings
- **************************/
-const char* WIFI_SSID = "xxxxxxxxxxxxxx";
-const char* WIFI_PWD = "xxxxxxxxxxxxxxxxxxxx";
+
 
 /***************************
  * MQTT Settings
  **************************/
 WiFiClient MQTT_client;
 PubSubClient client(MQTT_client);
-#define SERVER      "raspberrypi"
-#define SERVERPORT  1883
-#define MQTT_USERNAME ""
-#define MQTT_KEY  ""
+
 
 #define USERNAME  "TestName/"
 #define PREAMBLE  "TestPreamble/"
@@ -193,6 +189,9 @@ void wifiConnectStation(){
 void mQTTConnect(){
  if (!client.connected()) {
         Serial.println("Attempting MQTT connection...");
+        Serial.println(MQTT_USERNAME);
+        Serial.print(" ");
+        Serial.print(MQTT_KEY);
         // Attempt to connect
         if (client.connect("", MQTT_USERNAME, MQTT_KEY)) {
           Serial.println("connected");
