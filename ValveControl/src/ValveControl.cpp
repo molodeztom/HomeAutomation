@@ -24,8 +24,10 @@ Home Automation Project
   20200510  V0.2: Output 3 fixed values to test valve behaviour
   20200510  V0.3: Get SetPoint as MCP digits from MQTT as int and set valve accordingly
   20201019  V0.4: Converted to visual studio code project
-  20201205  V0.5: Include secrets.h software string output
-  20201213  V0.6: + INA219 sensor tests sucessfull
+  (valveCurTest)----------------------
+  20201205  V0.5: Include secrets.h software string output (valveCurTest)
+  20201213  V0.6: + INA219 sensor tests sucessfull (valveCurTest)
+  20201213  V0.7: + Temperature Sensor 1 added
   
   
 
@@ -40,11 +42,33 @@ Home Automation Project
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h> //MQTT
 #include "D:\Arduino\HomeAutomationSecrets.h"
+//libs for DS18B20
+#include "Spi.h"
+#include <DallasTemperature.h>
 
-const String sSoftware = "ValveControl V0.6";
 
+const String sSoftware = "ValveControl V0.7";
 
-
+/***************************
+ * TempSensor Settings
+ **************************/
+//pin GPIO2 (NodeMCU) D4 =  GPIO4  (ESP12-F Modul) use GPIO Number, when using higher pins may need to setup INPUT_PULLUP
+const byte bus = 12; 
+#define SENSCORR1A -0.3 //calibration
+OneWire oneWire(bus);
+DallasTemperature sensoren(&oneWire);
+//Array to store temp sensor adresses 
+DeviceAddress adressen; //TODO rename
+//Datenstruktur für den Datenaustausch
+#define CHAN 5            // device channel 1 = Developmentboard 2 = ESP gelötet 5 = Valve Control
+struct DATEN_STRUKTUR
+{
+  int chan = CHAN;
+  float temp1 = -127; //Aussen A
+  float temp2 = -127; //Aussen B
+  float fHumidity = -1;
+  float fVoltage = -1; //Batterie Sensor
+};
 
 /***************************
  * MQTT Settings
@@ -61,6 +85,7 @@ PubSubClient client(MQTT_client);
 /***************************
  * Measurement Variables
  **************************/
+  DATEN_STRUKTUR data;
   const int mqttRecBufSiz = 50;
   char mqttBufValvPos[mqttRecBufSiz];
   int iValvPosSetP; //Setpoint Valve Position
@@ -90,7 +115,8 @@ int iMCPMaxCode = 4096; //code for max output
 float fVFact = 10.1; // 4095 volts per digit
 int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
 
-
+//Forward declarations
+void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
 
@@ -99,6 +125,8 @@ void setup(void) {
   Serial.begin(swBAUD_RATE);
   Serial.println("");
  Serial.println(sSoftware);
+ //TODO Remove if not needed or external PUll UP
+ pinMode(12, INPUT_PULLUP);
 
   dac.begin(iMCP4725Adr);  //init dac with I2C adress
   
@@ -117,6 +145,42 @@ void setup(void) {
     mQTTConnect();     
   }
 
+  //initialize temp sensors
+    sensoren.begin();
+
+ //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
+  if (!sensoren.getAddress(adressen, 0))
+  {
+    Serial.println("0: Kein Temperatursensor vorhanden!");
+  }
+//adressen anzeigen
+#ifdef DEBUG
+  Serial.print("Adresse1: ");
+  printAddress(adressen);
+  Serial.println();
+
+  //2. Sensor
+  if (!sensoren.getAddress(adressen, 1))
+  {
+    Serial.println("1: Kein Temperatursensor vorhanden!");
+  }
+//adressen anzeigen
+
+  Serial.print("Adresse2: ");
+  printAddress(adressen);
+  Serial.println();
+#endif
+
+#ifdef DEBUG
+  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) TODO das ist nur für den ersten Sensor oder?
+  sensoren.setResolution(adressen, 12);
+  Serial.print("Auflösung = ");
+  Serial.print(sensoren.getResolution(adressen), DEC);
+  Serial.println();
+#endif
+
+
+  
   // Initialize the INA219.
   // By default the initialization will use the largest range (32V, 2A).  However
   // you can call a setCalibration function to change this range (see comments).
@@ -134,6 +198,14 @@ void setup(void) {
 
   Serial.println("Measuring voltage and current with INA219 ...");
 
+ //Temperaturmessung starten
+  sensoren.requestTemperatures();
+
+  delay(750); //750 ms warten bis die Messung fertig ist
+
+  //Temperaturwert holen und in Datenstruktur zum Senden speichern
+  data.temp1 = sensoren.getTempCByIndex(0) + SENSCORR1A;
+  data.temp2 = sensoren.getTempCByIndex(1) ;
 
   Serial.println("Setup done");
   delay(1000);
@@ -185,6 +257,15 @@ void loop(void) {
   current_mA = ina219.getCurrent_mA();
   power_mW = ina219.getPower_mW();
   loadvoltage = busvoltage + (shuntvoltage / 1000);
+  data.temp1 = 0;
+  data.temp2 = 0;
+  //Test get temperatures
+  //Temperaturmessung starten
+  sensoren.requestTemperatures();
+
+  delay(750); //750 ms warten bis die Messung fertig ist
+    data.temp1 = sensoren.getTempCByIndex(0) ; //+ SENSCORR1A;
+    data.temp2 = sensoren.getTempCByIndex(1) ;
   
   
   Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
@@ -193,6 +274,16 @@ void loop(void) {
   Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
   Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
   Serial.println("");
+
+  #ifdef DEBUG
+  Serial.print("Temperatur1: ");
+  Serial.print(data.temp1);
+  Serial.println("°C");
+  Serial.print("Temperatur2: ");
+  Serial.print(data.temp2);
+  Serial.println("°C");
+
+#endif
 
       
    }
@@ -256,5 +347,17 @@ void mQTTConnect(){
         Serial.print("failed, rc=");
         Serial.print(client.state());
       }
+  }
+}
+
+// function um eine Sensoradresse zu drucken
+void printAddress(DeviceAddress adressen)
+{
+  for (uint8_t i = 0; i < 8; i++)
+  {
+    if (adressen[i] < 16)
+      Serial.print("0");
+    Serial.print(adressen[i], HEX);
+    Serial.print(":");
   }
 }
