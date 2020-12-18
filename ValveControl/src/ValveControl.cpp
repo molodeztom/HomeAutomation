@@ -29,6 +29,7 @@ Home Automation Project
   20201213  V0.6: + INA219 sensor tests sucessfull (valveCurTest)
   20201213  V0.7: + Temperature Sensor 1 added
   20201218  V0.8: c Current measurement in own timing slot
+  20201218  V0.9: c publish current values via mqtt
   
   
 
@@ -47,7 +48,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveControl V0.8";
+const String sSoftware = "ValveControl V0.9";
 
 /***************************
  * TempSensor Settings
@@ -74,7 +75,10 @@ struct DATEN_STRUKTUR
  * MQTT Settings
  **************************/
 WiFiClient MQTT_client;
-PubSubClient client(MQTT_client);
+PubSubClient  mqttClient(MQTT_client);
+//TODO one channel for ValveCntrl
+//SubChannel ValvPos to receive positions from master
+//SubChannel ValvMeasurement to send temperatures, volt, current ....
 
 #define USERNAME "TestName/"
 #define PREAMBLE "TestPreamble/"
@@ -102,7 +106,7 @@ const unsigned long ulMQTTInterval = 2 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
 const unsigned long ulValveSetInterval = 10 * 1000UL; //set valve
 long lValveSetTime = 0;
-const unsigned long ulCurMeasurementInt = 5 * 1000UL; //measure current
+const unsigned long ulCurMeasurementInt = 5  * 1000UL; //measure current
 long lCurMeasurementTime = 0;
 
 /***************************
@@ -142,9 +146,9 @@ void setup(void)
     WiFi.macAddress(macAddr);
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
-  client.setServer(SERVER, SERVERPORT);
+   mqttClient.setServer(SERVER, SERVERPORT);
   //Connect mQTT
-  if (!client.connected())
+  if (! mqttClient.connected())
   {
     mQTTConnect();
   }
@@ -228,13 +232,13 @@ void loop(void)
   // call MQTT loop within defined timeframe reconnect if connection lost
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
-    bool alive = client.loop();
+    bool alive =  mqttClient.loop();
     if (alive == false)
     {
-      Serial.println("client loop failure");
+      Serial.println(" mqttClient loop failure");
     }
     //--------------------------check MQTT connection
-    if (!client.connected())
+    if (! mqttClient.connected())
     {
       mQTTConnect();
     }
@@ -297,6 +301,13 @@ void loop(void)
     Serial.print(power_mW);
     Serial.println(" mW");
     Serial.println("");
+    //TODO own time slot?
+    char valueStr[20]; //helper to convert string to MQTT char
+      dtostrf(current_mA, 3, 2, valueStr);
+      Serial.print("publish: ");
+      Serial.println(valueStr);
+
+     mqttClient.publish("ValveControl/Current", valueStr);
 
     lCurMeasurementTime = millis();
   }
@@ -341,30 +352,30 @@ void wifiConnectStation()
 //Connect to MQTT Server
 void mQTTConnect()
 {
-  if (!client.connected())
+  if (!mqttClient.connected())
   {
     Serial.println("Attempting MQTT connection...");
     Serial.println(MQTT_USERNAME);
     Serial.print(" ");
     Serial.print(MQTT_KEY);
     // Attempt to connect
-    if (client.connect("", MQTT_USERNAME, MQTT_KEY))
+    if ( mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
     {
       Serial.println("connected");
-      //client.publish("Test", "Test from Valve Control");
+      // mqttClient.publish("Test", "Test from Valve Control");
       bool subscribeOK = false;
-      subscribeOK = client.subscribe(T_CHANNEL);
+      subscribeOK =  mqttClient.subscribe(T_CHANNEL);
       if (subscribeOK)
       {
         Serial.println("subscribed ValvPos");
       }
 
-      client.setCallback(callback);
+       mqttClient.setCallback(callback);
     }
     else
     {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
+      Serial.print( mqttClient.state());
     }
   }
 }
