@@ -28,6 +28,7 @@ Home Automation Project
   20201205  V0.5: Include secrets.h software string output (valveCurTest)
   20201213  V0.6: + INA219 sensor tests sucessfull (valveCurTest)
   20201213  V0.7: + Temperature Sensor 1 added
+  20201218  V0.8: c Current measurement in own timing slot
   
   
 
@@ -46,21 +47,20 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-
-const String sSoftware = "ValveControl V0.7";
+const String sSoftware = "ValveControl V0.8";
 
 /***************************
  * TempSensor Settings
  **************************/
 //pin GPIO2 (NodeMCU) D4 =  GPIO4  (ESP12-F Modul) use GPIO Number, when using higher pins may need to setup INPUT_PULLUP
-const byte bus = 12; 
+const byte bus = 12;
 #define SENSCORR1A -0.3 //calibration
 OneWire oneWire(bus);
 DallasTemperature sensoren(&oneWire);
-//Array to store temp sensor adresses 
+//Array to store temp sensor adresses
 DeviceAddress adressen; //TODO rename
 //Datenstruktur für den Datenaustausch
-#define CHAN 5            // device channel 1 = Developmentboard 2 = ESP gelötet 5 = Valve Control
+#define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gelötet 5 = Valve Control
 struct DATEN_STRUKTUR
 {
   int chan = CHAN;
@@ -76,31 +76,34 @@ struct DATEN_STRUKTUR
 WiFiClient MQTT_client;
 PubSubClient client(MQTT_client);
 
-
-#define USERNAME  "TestName/"
-#define PREAMBLE  "TestPreamble/"
+#define USERNAME "TestName/"
+#define PREAMBLE "TestPreamble/"
 #define T_CHANNEL "ValvPos"
 #define T_COMMAND "command"
 
 /***************************
  * Measurement Variables
  **************************/
-  DATEN_STRUKTUR data;
-  const int mqttRecBufSiz = 50;
-  char mqttBufValvPos[mqttRecBufSiz];
-  int iValvPosSetP; //Setpoint Valve Position
+DATEN_STRUKTUR data;
+const int mqttRecBufSiz = 50;
+char mqttBufValvPos[mqttRecBufSiz];
+int iValvPosSetP; //Setpoint Valve Position
+float shuntvoltage = 0;
+float busvoltage = 0;
+float current_mA = 0;
+float loadvoltage = 0;
+float power_mW = 0;
 
 /***************************
  * Timing
  **************************/
 
-const unsigned long ulMQTTInterval = 2*1000UL; //call MQTT server
-long lMQTTTime =0; 
-const unsigned long ulValveSetInterval = 5*1000UL; //call MQTT server
-long lValveSetTime =0; 
-
-
-  
+const unsigned long ulMQTTInterval = 2 * 1000UL; //call MQTT server
+long lMQTTTime = 0;
+const unsigned long ulValveSetInterval = 10 * 1000UL; //set valve
+long lValveSetTime = 0;
+const unsigned long ulCurMeasurementInt = 5 * 1000UL; //measure current
+long lCurMeasurementTime = 0;
 
 /***************************
  * otherSettings
@@ -112,7 +115,7 @@ Adafruit_INA219 ina219;
 
 int iMCP4725Adr = 0x60;
 int iMCPMaxCode = 4096; //code for max output
-float fVFact = 10.1; // 4095 volts per digit
+float fVFact = 10.1;    // 4095 volts per digit
 int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
 
 //Forward declarations
@@ -120,17 +123,17 @@ void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
 
-
-void setup(void) {
+void setup(void)
+{
   Serial.begin(swBAUD_RATE);
   Serial.println("");
- Serial.println(sSoftware);
- //TODO Remove if not needed or external PUll UP
- pinMode(12, INPUT_PULLUP);
+  Serial.println(sSoftware);
+  //TODO Remove if not needed or external PUll UP
+  pinMode(12, INPUT_PULLUP);
 
-  dac.begin(iMCP4725Adr);  //init dac with I2C adress
-  
-//WIFI Setup
+  dac.begin(iMCP4725Adr); //init dac with I2C adress
+
+  //WIFI Setup
   WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
   wifiConnectStation();
   if (WiFi.status() == WL_CONNECTED)
@@ -140,15 +143,16 @@ void setup(void) {
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
   client.setServer(SERVER, SERVERPORT);
-  //Connect mQTT 
-  if (!client.connected()) {
-    mQTTConnect();     
+  //Connect mQTT
+  if (!client.connected())
+  {
+    mQTTConnect();
   }
 
   //initialize temp sensors
-    sensoren.begin();
+  sensoren.begin();
 
- //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
+  //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
   if (!sensoren.getAddress(adressen, 0))
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
@@ -164,7 +168,7 @@ void setup(void) {
   {
     Serial.println("1: Kein Temperatursensor vorhanden!");
   }
-//adressen anzeigen
+  //adressen anzeigen
 
   Serial.print("Adresse2: ");
   printAddress(adressen);
@@ -179,41 +183,38 @@ void setup(void) {
   Serial.println();
 #endif
 
-
-  
   // Initialize the INA219.
   // By default the initialization will use the largest range (32V, 2A).  However
   // you can call a setCalibration function to change this range (see comments).
-  
-  if (! ina219.begin()) {
-    Serial.println("Failed to find INA219 chip");
-  //  while (1) { delay(10); }
-  }
-  
 
-    // To use a slightly lower 32V, 1A range (higher precision on amps):
+  if (!ina219.begin())
+  {
+    Serial.println("Failed to find INA219 chip");
+    //  while (1) { delay(10); }
+  }
+
+  // To use a slightly lower 32V, 1A range (higher precision on amps):
   //ina219.setCalibration_32V_1A();
   // Or to use a lower 16V, 400mA range (higher precision on volts and amps):
   //ina219.setCalibration_16V_400mA();
 
   Serial.println("Measuring voltage and current with INA219 ...");
 
- //Temperaturmessung starten
+  //Temperaturmessung starten
   sensoren.requestTemperatures();
 
   delay(750); //750 ms warten bis die Messung fertig ist
 
   //Temperaturwert holen und in Datenstruktur zum Senden speichern
   data.temp1 = sensoren.getTempCByIndex(0) + SENSCORR1A;
-  data.temp2 = sensoren.getTempCByIndex(1) ;
+  data.temp2 = sensoren.getTempCByIndex(1);
 
   Serial.println("Setup done");
   delay(1000);
-
-
 }
 
-void loop(void) {
+void loop(void)
+{
   /*
     uint16_t i;
     uint16_t iVolt = 0;
@@ -224,129 +225,147 @@ void loop(void) {
           delay(200);
           */
 
-   float shuntvoltage = 0;
-  float busvoltage = 0;
-  float current_mA = 0;
-  float loadvoltage = 0;
-  float power_mW = 0;
- 
-
   // call MQTT loop within defined timeframe reconnect if connection lost
-  if((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
-  { 
-     bool alive = client.loop();
-    if (alive == false){
+  if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
+  {
+    bool alive = client.loop();
+    if (alive == false)
+    {
       Serial.println("client loop failure");
     }
-    //--------------------------check MQTT connection 
-    if (!client.connected()) {
-        mQTTConnect();     
+    //--------------------------check MQTT connection
+    if (!client.connected())
+    {
+      mQTTConnect();
     }
-    lMQTTTime = millis();  
+    lMQTTTime = millis();
   }
   // set valve position every 60 seconds to current set position
-   if((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
-   {
-      Serial.println("Set Valve to: ");
-      Serial.println(iValvPosSetP);
-      dac.setVoltage(iValvPosSetP, false);
-      lValveSetTime = millis(); 
-      //Test get current measurements
-        shuntvoltage = ina219.getShuntVoltage_mV();
-  busvoltage = ina219.getBusVoltage_V();
-  current_mA = ina219.getCurrent_mA();
-  power_mW = ina219.getPower_mW();
-  loadvoltage = busvoltage + (shuntvoltage / 1000);
-  data.temp1 = 0;
-  data.temp2 = 0;
-  //Test get temperatures
-  //Temperaturmessung starten
-  sensoren.requestTemperatures();
+  if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
+  {
+    Serial.println("Set Valve to: ");
+    Serial.println(iValvPosSetP);
+    dac.setVoltage(iValvPosSetP, false);
+    lValveSetTime = millis();
 
-  delay(750); //750 ms warten bis die Messung fertig ist
-    data.temp1 = sensoren.getTempCByIndex(0) ; //+ SENSCORR1A;
-    data.temp2 = sensoren.getTempCByIndex(1) ;
-  
-  
-  Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
-  Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
-  Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
-  Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
-  Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
-  Serial.println("");
+    data.temp1 = 0;
+    data.temp2 = 0;
+    //Test get temperatures
+    //Temperaturmessung starten
+    sensoren.requestTemperatures();
 
-  #ifdef DEBUG
-  Serial.print("Temperatur1: ");
-  Serial.print(data.temp1);
-  Serial.println("°C");
-  Serial.print("Temperatur2: ");
-  Serial.print(data.temp2);
-  Serial.println("°C");
+    delay(750);                               //750 ms warten bis die Messung fertig ist
+    data.temp1 = sensoren.getTempCByIndex(0); //+ SENSCORR1A;
+    data.temp2 = sensoren.getTempCByIndex(1);
 
+#ifdef DEBUG
+    Serial.print("Temperatur1: ");
+    Serial.print(data.temp1);
+    Serial.println("°C");
+    Serial.print("Temperatur2: ");
+    Serial.print(data.temp2);
+    Serial.println("°C");
 #endif
+  }
+  // measure valve current within defined timeframe
+  if ((unsigned long)(millis() - lCurMeasurementTime) > ulCurMeasurementInt)
+  {
+    shuntvoltage = 0;
+    busvoltage = 0;
+    current_mA = 0;
+    loadvoltage = 0;
+    power_mW = 0;
+    //Test get current measurements
+    shuntvoltage = ina219.getShuntVoltage_mV();
+    busvoltage = ina219.getBusVoltage_V();
+    current_mA = ina219.getCurrent_mA();
+    power_mW = ina219.getPower_mW();
+    loadvoltage = busvoltage + (shuntvoltage / 1000);
+    Serial.print("Bus Voltage:   ");
+    Serial.print(busvoltage);
+    Serial.println(" V");
+    Serial.print("Shunt Voltage: ");
+    Serial.print(shuntvoltage);
+    Serial.println(" mV");
+    Serial.print("Load Voltage:  ");
+    Serial.print(loadvoltage);
+    Serial.println(" V");
+    Serial.print("Current:       ");
+    Serial.print(current_mA);
+    Serial.println(" mA");
+    Serial.print("Power:         ");
+    Serial.print(power_mW);
+    Serial.println(" mW");
+    Serial.println("");
 
-      
-   }
- 
+    lCurMeasurementTime = millis();
+  }
 }
 
-void callback(char* topic, byte* data, unsigned int dataLength) {
-  // handle message arrived 
+void callback(char *topic, byte *data, unsigned int dataLength)
+{
+  // handle message arrived
   iValvPosSetP = 0;
   Serial.println(iValvPosSetP);
   Serial.print(topic);
   Serial.println(": ");
 
-  
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
-  if(strcmp(topic, "ValvPos") == 0){
-     memset(&mqttBufValvPos[0],0,mqttRecBufSiz);
-     strncpy(mqttBufValvPos, (char*)data, dataLength);
-     mqttBufValvPos[dataLength+1] = '\0';
+  if (strcmp(topic, "ValvPos") == 0)
+  {
+    memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
+    strncpy(mqttBufValvPos, (char *)data, dataLength);
+    mqttBufValvPos[dataLength + 1] = '\0';
     Serial.println(mqttBufValvPos);
     iValvPosSetP = atoi(mqttBufValvPos);
-     Serial.println(iValvPosSetP);
-
+    Serial.println(iValvPosSetP);
   }
-  
- }
+}
 
-//Connect to local WIFI 
-void wifiConnectStation(){
+//Connect to local WIFI
+void wifiConnectStation()
+{
   WiFi.mode(WIFI_STA);
-  Serial.println("WifiStat connecting to "); Serial.println(WIFI_SSID);
+  Serial.println("WifiStat connecting to ");
+  Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
-  while (WiFi.status() != WL_CONNECTED){
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(250);
     Serial.print(".");
   }
   Serial.println();
 }
 
-//Connect to MQTT Server 
-void mQTTConnect(){
- if (!client.connected()) {
-        Serial.println("Attempting MQTT connection...");
-        Serial.println(MQTT_USERNAME);
-        Serial.print(" ");
-        Serial.print(MQTT_KEY);
-        // Attempt to connect
-        if (client.connect("", MQTT_USERNAME, MQTT_KEY)) {
-          Serial.println("connected");
-          //client.publish("Test", "Test from Valve Control");
-         bool subscribeOK = false;
-          subscribeOK = client.subscribe(T_CHANNEL);
-          if (subscribeOK){
-            Serial.println("subscribed ValvPos");
-          }
-           
-        client.setCallback(callback);
-        
-      } else {
-        Serial.print("failed, rc=");
-        Serial.print(client.state());
+//Connect to MQTT Server
+void mQTTConnect()
+{
+  if (!client.connected())
+  {
+    Serial.println("Attempting MQTT connection...");
+    Serial.println(MQTT_USERNAME);
+    Serial.print(" ");
+    Serial.print(MQTT_KEY);
+    // Attempt to connect
+    if (client.connect("", MQTT_USERNAME, MQTT_KEY))
+    {
+      Serial.println("connected");
+      //client.publish("Test", "Test from Valve Control");
+      bool subscribeOK = false;
+      subscribeOK = client.subscribe(T_CHANNEL);
+      if (subscribeOK)
+      {
+        Serial.println("subscribed ValvPos");
       }
+
+      client.setCallback(callback);
+    }
+    else
+    {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+    }
   }
 }
 
