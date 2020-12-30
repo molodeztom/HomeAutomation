@@ -35,6 +35,7 @@ I2CScanner scanner;
 
 //if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them	
 // use Pin Numbers from GPIO e.g. GPIO4 = 4
+// For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5
 #define SDA_PIN 4
 #define SCL_PIN 5
 
