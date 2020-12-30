@@ -97,6 +97,7 @@ float busvoltage = 0;
 float current_mA = 0;
 float loadvoltage = 0;
 float power_mW = 0;
+float current_mA_max = 0;
 
 /***************************
  * Timing
@@ -104,9 +105,9 @@ float power_mW = 0;
 
 const unsigned long ulMQTTInterval = 2 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 10 * 1000UL; //set valve
+const unsigned long ulValveSetInterval = 10 * 1000UL; //set valve, measure temp, send mqtt
 long lValveSetTime = 0;
-const unsigned long ulCurMeasurementInt = 5  * 1000UL; //measure current
+const unsigned long ulCurMeasurementInt = 5  * 1000UL; //measure current and integrate
 long lCurMeasurementTime = 0;
 
 /***************************
@@ -261,6 +262,13 @@ void loop(void)
     delay(750);                               //750 ms warten bis die Messung fertig ist
     data.temp1 = sensoren.getTempCByIndex(0); //+ SENSCORR1A;
     data.temp2 = sensoren.getTempCByIndex(1);
+     char valueStr[20]; //helper to convert string to MQTT char
+      dtostrf(current_mA, 3, 2, valueStr);
+      Serial.print("publish: ");
+      Serial.println(valueStr);
+
+     mqttClient.publish("ValveControl/Current", valueStr);
+
 
 #ifdef DEBUG
     Serial.print("Temperatur1: ");
@@ -301,14 +309,8 @@ void loop(void)
     Serial.print(power_mW);
     Serial.println(" mW");
     Serial.println("");
-    //TODO own time slot?
-    char valueStr[20]; //helper to convert string to MQTT char
-      dtostrf(current_mA, 3, 2, valueStr);
-      Serial.print("publish: ");
-      Serial.println(valueStr);
-
-     mqttClient.publish("ValveControl/Current", valueStr);
-
+   
+   current_mA_max = current_mA; 
     lCurMeasurementTime = millis();
   }
 }
