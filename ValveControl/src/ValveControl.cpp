@@ -1,12 +1,3 @@
-/**************************************************************************/
-/*!
-   Test mit OP aus 3,3 V digital 10 V Ausgang erzeugen
-   Mit verschiedenen Werten takten
-
-   20200509 V0.1  First test
-*/
-/**************************************************************************/
-
 /**************************************************************************
 Home Automation Project
    Valve Control for central heating 
@@ -17,7 +8,7 @@ Home Automation Project
   LMxx to amplify 0-5 V DC to 0-10 V DC
   
   Connect to MQTT Server and subscribe valve closing rate
-  control
+  control. Measure IN and OUT Temp. Display values on LCD. Send Temp Values with MQTT. 
 
   History: master if not shown otherwise
   20200509  V0.1: Copy from Adafruit example for MCP4725A1
@@ -28,6 +19,7 @@ Home Automation Project
                   + INA219 sensor tests sucessfull (valveCurTest)
                   + Temperature Sensor 1 added
                   c publish current values via mqtt
+  20201230  V0.6: +LCD display with hello world
   
   
 
@@ -41,6 +33,7 @@ Home Automation Project
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h> //MQTT
+#include <LiquidCrystal_I2C.h>
 //TODO need this? #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 #include "D:\Arduino\HomeAutomationSecrets.h"
@@ -48,7 +41,27 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveControl V0.5";
+const String sSoftware = "ValveCtrl V0.6";
+
+/***************************
+ * LCD Settings
+ **************************/
+LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 chars and 2 line display
+/* I2C Bus */
+//if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
+// use Pin Numbers from GPIO e.g. GPIO4 = 4
+// For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5
+#define SDA_PIN 4
+#define SCL_PIN 5
+byte gradeChar[8] = {
+    0b00111,
+    0b00101,
+    0b00111,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000};
 
 /***************************
  * TempSensor Settings
@@ -75,7 +88,7 @@ struct DATEN_STRUKTUR
  * MQTT Settings
  **************************/
 WiFiClient MQTT_client;
-PubSubClient  mqttClient(MQTT_client);
+PubSubClient mqttClient(MQTT_client);
 //TODO one channel for ValveCntrl
 //SubChannel ValvPos to receive positions from master
 //SubChannel ValvMeasurement to send temperatures, volt, current ....
@@ -101,7 +114,6 @@ const unsigned long ulMQTTInterval = 2 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
 const unsigned long ulValveSetInterval = 5 * 1000UL; //set valve, measure temp, send mqtt
 long lValveSetTime = 0;
- 
 
 /***************************
  * otherSettings
@@ -124,10 +136,21 @@ void setup(void)
   Serial.begin(swBAUD_RATE);
   Serial.println("");
   Serial.println(sSoftware);
-  //TODO Remove if not needed or external PUll UP
+  //TODO Remove if not needed or external PUll UP for Temp Sensor Bus
   pinMode(12, INPUT_PULLUP);
 
+  Wire.begin(SDA_PIN, SCL_PIN);
+
   dac.begin(iMCP4725Adr); //init dac with I2C adress
+
+  /* LCD */
+  lcd.init(); // initialize the lcd
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Init");
+  lcd.setCursor(0, 1);
+  lcd.print(sSoftware);
+  delay(1000);
 
   //WIFI Setup
   WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -138,9 +161,9 @@ void setup(void)
     WiFi.macAddress(macAddr);
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
-   mqttClient.setServer(SERVER, SERVERPORT);
+  mqttClient.setServer(SERVER, SERVERPORT);
   //Connect mQTT
-  if (! mqttClient.connected())
+  if (!mqttClient.connected())
   {
     mQTTConnect();
   }
@@ -181,9 +204,6 @@ void setup(void)
   Serial.println();
 #endif
 
-
-
-
   //Temperaturmessung starten
   sensoren.requestTemperatures();
 
@@ -199,29 +219,30 @@ void setup(void)
 
 void loop(void)
 {
-  
+
   // call MQTT loop within defined timeframe reconnect if connection lost
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
-    bool alive =  mqttClient.loop();
+    bool alive = mqttClient.loop();
     if (alive == false)
     {
       Serial.println(" mqttClient loop failure");
     }
     //--------------------------check MQTT connection
-    if (! mqttClient.connected())
+    if (!mqttClient.connected())
     {
       mQTTConnect();
     }
     lMQTTTime = millis();
   }
   // set valve position every 60 seconds to current set position
+  // measure temp and display
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
     Serial.println("Set Valve to: ");
     Serial.println(iValvPosSetP);
     dac.setVoltage(iValvPosSetP, false);
-   
+
     data.temp1 = 0;
     data.temp2 = 0;
     //Test get temperatures
@@ -231,8 +252,24 @@ void loop(void)
     delay(750);                               //750 ms warten bis die Messung fertig ist
     data.temp1 = sensoren.getTempCByIndex(0); //+ SENSCORR1A;
     data.temp2 = sensoren.getTempCByIndex(1);
-    
 
+    // Write display we have 2 columns with each 16 characters
+    char valueStr[20]; //helper for conversion
+    lcd.clear();
+    lcd.createChar(0, gradeChar);
+    lcd.setCursor(0, 0);
+    lcd.print("I:");
+    dtostrf(data.temp1, 3, 1, valueStr);
+    lcd.print(valueStr);
+    lcd.print(" O:");
+    dtostrf(data.temp2, 3, 1, valueStr);
+    lcd.print(valueStr);
+    lcd.print(" ");
+    lcd.write(0);
+    lcd.print("C");
+    lcd.setCursor(0, 1);
+    lcd.print("Ventil:");
+    lcd.print(iValvPosSetP);
 
 #ifdef DEBUG
     Serial.print("Temperatur1: ");
@@ -243,17 +280,15 @@ void loop(void)
     Serial.println("�C");
 #endif
 
-  char valueStr[20]; //helper for conversion
-  dtostrf(data.temp1, 3, 2, valueStr);
-  mqttClient.publish("ValveControl/Current", valueStr);
-  Serial.println("publish");
-
-  lValveSetTime = millis();
-
-
+    dtostrf(iValvPosSetP, 3, 0, valueStr);
+    mqttClient.publish("ValveControl/CurPos", valueStr);
+    dtostrf(data.temp1, 3, 2, valueStr);
+    mqttClient.publish("ValveControl/TempIn", valueStr);
+    dtostrf(data.temp2, 3, 2, valueStr);
+    mqttClient.publish("ValveControl/TempOut", valueStr);
+    Serial.println("publish");
+    lValveSetTime = millis();
   }
-
- 
 }
 
 void callback(char *topic, byte *data, unsigned int dataLength)
@@ -264,7 +299,6 @@ void callback(char *topic, byte *data, unsigned int dataLength)
   Serial.print(topic);
   Serial.println(": ");
 
-  
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
   if (strcmp(topic, "ValvPos") == 0)
@@ -282,7 +316,8 @@ void callback(char *topic, byte *data, unsigned int dataLength)
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
-  Serial.println("WifiStat connecting to "); Serial.println(WIFI_SSID);
+  Serial.println("WifiStat connecting to ");
+  Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   while (WiFi.status() != WL_CONNECTED)
   {
@@ -302,23 +337,23 @@ void mQTTConnect()
     Serial.print(" ");
     Serial.print(MQTT_KEY);
     // Attempt to connect
-    if ( mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
+    if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
     {
       Serial.println("connected");
       // mqttClient.publish("Test", "Test from Valve Control");
       bool subscribeOK = false;
-      subscribeOK =  mqttClient.subscribe(T_CHANNEL);
+      subscribeOK = mqttClient.subscribe(T_CHANNEL);
       if (subscribeOK)
       {
         Serial.println("subscribed ValvPos");
       }
 
-       mqttClient.setCallback(callback);
+      mqttClient.setCallback(callback);
     }
     else
     {
       Serial.print("failed, rc=");
-      Serial.print( mqttClient.state());
+      Serial.print(mqttClient.state());
     }
   }
 }

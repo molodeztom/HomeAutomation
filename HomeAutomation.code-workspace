@@ -27,6 +27,10 @@
 		{
 			"name": "I2CScanner",
 			"path": "I2CScanner"
+		},
+		{
+			"name": "LCDTest",
+			"path": "..\\LCDTest"
 		}
 	],
 	"settings": {}
