@@ -390,6 +390,7 @@ void sendMQTTMessage()
   else
   {
     if (sSensor1.iSensorCnt > SensValidMax)
+  
       mqttClient.publish("Sensor1/Err", "1");
   }
   //Sensor 2
