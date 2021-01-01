@@ -21,6 +21,7 @@ Home Automation Project
                   c publish current values via mqtt
   20201230  V0.6: +LCD display with hello world
   20210101  V0.7: c Values for valve 0-5 instead of 4095
+  20210101  V0.8: + Watchdog for MQTT and error msg display send errors with MQTT to server 
   
   
 
@@ -41,7 +42,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.7";
+const String sSoftware = "ValveCtrl V0.8";
 
 /***************************
  * LCD Settings
@@ -97,7 +98,6 @@ PubSubClient mqttClient(MQTT_client);
 #define T_CHANNEL "ValveControl"
 #define T_COMMAND "command"
 
-
 /***************************
  * Measurement Variables
  **************************/
@@ -110,10 +110,17 @@ int iValvPosSetP; //Setpoint Valve Position
  * Timing
  **************************/
 
-const unsigned long ulMQTTInterval = 2 * 1000UL; //call MQTT server
+const unsigned long ulMQTTInterval = 4 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 5 * 1000UL; //set valve, measure temp, send mqtt
+const unsigned long ulValveSetInterval = 30 * 1000UL; //set valve, measure temp, send mqtt
 long lValveSetTime = 0;
+const unsigned long ulUpdateLCDInterval = 5 * 1000UL; //Write text on LCD
+long lUpdateLCDTime = 0;
+bool bError = false; //Error
+String sErrorText = "";
+String sLastErrorText = ""; //store last Error to send to Server
+bool bErrorDisp = false;
+int iCount = 0; //Counter for display to show its running
 
 /***************************
  * otherSettings
@@ -130,6 +137,7 @@ int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
 void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
+void updateLCD();
 
 void setup(void)
 {
@@ -150,7 +158,7 @@ void setup(void)
   lcd.print("Init");
   lcd.setCursor(0, 1);
   lcd.print(sSoftware);
-  delay(1000);
+  delay(3000);
 
   //WIFI Setup
   WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -177,6 +185,8 @@ void setup(void)
   if (!sensoren.getAddress(adressen, 0))
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
+    bError = true;
+    sErrorText = "01 NoTempSens";
   }
 //adressen anzeigen
 #ifdef DEBUG
@@ -188,6 +198,8 @@ void setup(void)
   if (!sensoren.getAddress(adressen, 1))
   {
     Serial.println("1: Kein Temperatursensor vorhanden!");
+    bError = true;
+    sErrorText = "01 NoTempSens";
   }
   //adressen anzeigen
 
@@ -215,6 +227,7 @@ void setup(void)
 
   Serial.println("Setup done");
   delay(1000);
+  lValveSetTime = ulValveSetInterval - 100; //trigger event sooner
 }
 
 void loop(void)
@@ -223,10 +236,16 @@ void loop(void)
   // call MQTT loop within defined timeframe reconnect if connection lost
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
-    bool alive = mqttClient.loop();
-    if (alive == false)
+    bool bMQTTalive = mqttClient.loop();
+    if (bMQTTalive == false)
     {
       Serial.println(" mqttClient loop failure");
+      bError = true;
+      sErrorText = "02 MQTTFailure";
+      if (WiFi.status() not_eq WL_CONNECTED)
+      {
+        sLastErrorText = "04 NoWLAN";
+      }
     }
     //--------------------------check MQTT connection
     if (!mqttClient.connected())
@@ -240,8 +259,11 @@ void loop(void)
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
     int iValvVolt;
+    //on Error open valve to full
+    if (bError == true)
+      iValvPosSetP = 5;
     //Convert position 0-5 to voltage 0-4095
-    iValvVolt = map(iValvPosSetP,0,5,0,4095);
+    iValvVolt = map(iValvPosSetP, 0, 5, 0, 4095);
     Serial.println("Set Valve to: ");
     Serial.println(iValvPosSetP);
     Serial.println(iValvVolt);
@@ -257,24 +279,6 @@ void loop(void)
     data.temp1 = sensoren.getTempCByIndex(0); //+ SENSCORR1A;
     data.temp2 = sensoren.getTempCByIndex(1);
 
-    // Write display we have 2 columns with each 16 characters
-    char valueStr[20]; //helper for conversion
-    lcd.clear();
-    lcd.createChar(0, gradeChar);
-    lcd.setCursor(0, 0);
-    lcd.print("I:");
-    dtostrf(data.temp1, 3, 1, valueStr);
-    lcd.print(valueStr);
-    lcd.print(" O:");
-    dtostrf(data.temp2, 3, 1, valueStr);
-    lcd.print(valueStr);
-    lcd.print(" ");
-    lcd.write(0);
-    lcd.print("C");
-    lcd.setCursor(0, 1);
-    lcd.print("Ventil:");
-    lcd.print(iValvPosSetP);
-
 #ifdef DEBUG
     Serial.print("Temperatur1: ");
     Serial.print(data.temp1);
@@ -283,15 +287,33 @@ void loop(void)
     Serial.print(data.temp2);
     Serial.println("�C");
 #endif
-
+    char valueStr[20]; //helper for conversion
     dtostrf(iValvPosSetP, 3, 0, valueStr);
-    mqttClient.publish(T_CHANNEL"/ActPos", valueStr);
+    mqttClient.publish(T_CHANNEL "/ActPos", valueStr);
     dtostrf(data.temp1, 3, 2, valueStr);
-    mqttClient.publish(T_CHANNEL"/TempIn", valueStr);
+    mqttClient.publish(T_CHANNEL "/TempIn", valueStr);
     dtostrf(data.temp2, 3, 2, valueStr);
-    mqttClient.publish(T_CHANNEL"/TempOut", valueStr);
+    mqttClient.publish(T_CHANNEL "/TempOut", valueStr);
+    if (bError == true)
+    {
+      mqttClient.publish(T_CHANNEL "/Err", sLastErrorText.c_str());
+      sLastErrorText = sErrorText; // if more than one error send both 
+    }
+
     Serial.println("publish");
+    iCount++;
+    if (iCount > 9)
+    {
+      iCount = 0;
+    }
+
     lValveSetTime = millis();
+  }
+
+  if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
+  {
+    updateLCD();
+    lUpdateLCDTime = millis();
   }
 }
 
@@ -305,7 +327,7 @@ void callback(char *topic, byte *data, unsigned int dataLength)
 
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
-  if (strcmp(topic, T_CHANNEL"/SetPos") == 0)
+  if (strcmp(topic, T_CHANNEL "/SetPos") == 0)
   {
     memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
     strncpy(mqttBufValvPos, (char *)data, dataLength);
@@ -313,7 +335,44 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     Serial.println(mqttBufValvPos);
     iValvPosSetP = atoi(mqttBufValvPos);
     Serial.println(iValvPosSetP);
+    //if we recieve MQTT messages everything should be ok again. Reset error.
+    bError = false;
+    sErrorText = "";
   }
+}
+
+void updateLCD()
+{
+  // Write display we have 2 columns with each 16 characters
+  char valueStr[20]; //helper for conversion
+  lcd.clear();
+  lcd.createChar(0, gradeChar);
+  lcd.setCursor(0, 0);
+  lcd.print("I:");
+  dtostrf(data.temp1, 3, 1, valueStr);
+  lcd.print(valueStr);
+  lcd.print(" O:");
+  dtostrf(data.temp2, 3, 1, valueStr);
+  lcd.print(valueStr);
+  lcd.print(" ");
+  lcd.write(0);
+  lcd.print("C");
+
+  if (bError == true && bErrorDisp == true)
+  {
+    lcd.setCursor(0, 1);
+    lcd.print(sErrorText);
+    bErrorDisp = false; //display error alternately
+  }
+  else
+  {
+    lcd.setCursor(0, 1);
+    lcd.print("Valve:");
+    lcd.print(iValvPosSetP);
+    bErrorDisp = true; //display error alternately
+  }
+  lcd.setCursor(15, 1);
+  lcd.print(iCount);
 }
 
 //Connect to local WIFI
@@ -323,11 +382,28 @@ void wifiConnectStation()
   Serial.println("WifiStat connecting to ");
   Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Connect to WLAN");
+  lcd.setCursor(0, 1);
+  int iCount = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(250);
     Serial.print(".");
+    lcd.print(".");
+    iCount++;
+    if (iCount > 16)
+    {
+      lcd.setCursor(0, 1);
+      lcd.print("                ");
+      lcd.setCursor(0, 1);
+      iCount = 0;
+    }
   }
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting");
   Serial.println();
 }
 
@@ -346,7 +422,7 @@ void mQTTConnect()
       Serial.println("connected");
       // mqttClient.publish("Test", "Test from Valve Control");
       bool subscribeOK = false;
-      subscribeOK = mqttClient.subscribe(T_CHANNEL"/SetPos");
+      subscribeOK = mqttClient.subscribe(T_CHANNEL "/SetPos");
       if (subscribeOK)
       {
         Serial.println("subscribed ValvPos");
@@ -358,6 +434,10 @@ void mQTTConnect()
     {
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
+      bError = true;
+      sErrorText = "03 MQTTConFail";
+      if (WiFi.status() not_eq WL_CONNECTED)
+        sErrorText = "05 NoWLAN";
     }
   }
 }
