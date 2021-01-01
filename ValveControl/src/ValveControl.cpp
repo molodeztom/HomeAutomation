@@ -20,6 +20,7 @@ Home Automation Project
                   + Temperature Sensor 1 added
                   c publish current values via mqtt
   20201230  V0.6: +LCD display with hello world
+  20210101  V0.7: c Values for valve 0-5 instead of 4095
   
   
 
@@ -34,14 +35,13 @@ Home Automation Project
 #include <ArduinoJson.h>
 #include <PubSubClient.h> //MQTT
 #include <LiquidCrystal_I2C.h>
-//TODO need this? #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 #include "D:\Arduino\HomeAutomationSecrets.h"
 //libs for DS18B20
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.6";
+const String sSoftware = "ValveCtrl V0.7";
 
 /***************************
  * LCD Settings
@@ -94,9 +94,9 @@ PubSubClient mqttClient(MQTT_client);
 //SubChannel ValvMeasurement to send temperatures, volt, current ....
 
 #define USERNAME "TestName/"
-#define PREAMBLE "TestPreamble/"
-#define T_CHANNEL "ValvPos"
+#define T_CHANNEL "ValveControl"
 #define T_COMMAND "command"
+
 
 /***************************
  * Measurement Variables
@@ -239,9 +239,13 @@ void loop(void)
   // measure temp and display
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
+    int iValvVolt;
+    //Convert position 0-5 to voltage 0-4095
+    iValvVolt = map(iValvPosSetP,0,5,0,4095);
     Serial.println("Set Valve to: ");
     Serial.println(iValvPosSetP);
-    dac.setVoltage(iValvPosSetP, false);
+    Serial.println(iValvVolt);
+    dac.setVoltage(iValvVolt, false);
 
     data.temp1 = 0;
     data.temp2 = 0;
@@ -281,11 +285,11 @@ void loop(void)
 #endif
 
     dtostrf(iValvPosSetP, 3, 0, valueStr);
-    mqttClient.publish("ValveControl/CurPos", valueStr);
+    mqttClient.publish(T_CHANNEL"/ActPos", valueStr);
     dtostrf(data.temp1, 3, 2, valueStr);
-    mqttClient.publish("ValveControl/TempIn", valueStr);
+    mqttClient.publish(T_CHANNEL"/TempIn", valueStr);
     dtostrf(data.temp2, 3, 2, valueStr);
-    mqttClient.publish("ValveControl/TempOut", valueStr);
+    mqttClient.publish(T_CHANNEL"/TempOut", valueStr);
     Serial.println("publish");
     lValveSetTime = millis();
   }
@@ -301,7 +305,7 @@ void callback(char *topic, byte *data, unsigned int dataLength)
 
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
-  if (strcmp(topic, "ValvPos") == 0)
+  if (strcmp(topic, T_CHANNEL"/SetPos") == 0)
   {
     memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
     strncpy(mqttBufValvPos, (char *)data, dataLength);
@@ -342,7 +346,7 @@ void mQTTConnect()
       Serial.println("connected");
       // mqttClient.publish("Test", "Test from Valve Control");
       bool subscribeOK = false;
-      subscribeOK = mqttClient.subscribe(T_CHANNEL);
+      subscribeOK = mqttClient.subscribe(T_CHANNEL"/SetPos");
       if (subscribeOK)
       {
         Serial.println("subscribed ValvPos");
