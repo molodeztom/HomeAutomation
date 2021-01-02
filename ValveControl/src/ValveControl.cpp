@@ -24,6 +24,7 @@ Home Automation Project
   20210101  V0.8:  + Watchdog for MQTT and error msg display send errors with MQTT to server 
   20210101  V0.9:  b ActValue leading blanks removed
   20210102  V0.10: + Light sensor GY-302 BH1750, switch off LCD backlight when dark (sic)
+  20210102  V0.11: + tactile switch for manual valve select
   
 
 **************************************************************************/
@@ -52,9 +53,25 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 char
 /* I2C Bus */
 //if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
 // use Pin Numbers from GPIO e.g. GPIO4 = 4
-// For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5
+// For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5, D7=13
 #define SDA_PIN 4
 #define SCL_PIN 5
+#define SWITCH_PIN 13
+#define ONE_WIRE_PIN 12
+
+/***************************
+ * TempSensor Settings
+ **************************/
+//pin GPIO2 (NodeMCU) D4 =  GPIO4  (ESP12-F Modul) use GPIO Number, when using higher pins may need to setup INPUT_PULLUP
+//const byte bus = 12;
+#define SENSCORR1A -0.3 //calibration
+OneWire oneWire(ONE_WIRE_PIN);
+DallasTemperature sensoren(&oneWire);
+//Array to store temp sensor adresses
+DeviceAddress adressen; //TODO rename
+//Datenstruktur f�r den Datenaustausch
+#define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gel�tet 5 = Valve Control
+
 byte gradeChar[8] = {
     0b00111,
     0b00101,
@@ -65,18 +82,6 @@ byte gradeChar[8] = {
     0b00000,
     0b00000};
 
-/***************************
- * TempSensor Settings
- **************************/
-//pin GPIO2 (NodeMCU) D4 =  GPIO4  (ESP12-F Modul) use GPIO Number, when using higher pins may need to setup INPUT_PULLUP
-const byte bus = 12;
-#define SENSCORR1A -0.3 //calibration
-OneWire oneWire(bus);
-DallasTemperature sensoren(&oneWire);
-//Array to store temp sensor adresses
-DeviceAddress adressen; //TODO rename
-//Datenstruktur f�r den Datenaustausch
-#define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gel�tet 5 = Valve Control
 struct DATEN_STRUKTUR
 {
   int chan = CHAN;
@@ -106,6 +111,8 @@ DATEN_STRUKTUR data;
 const int mqttRecBufSiz = 50;
 char mqttBufValvPos[mqttRecBufSiz];
 int iValvPosSetP; //Setpoint Valve Position
+int iManMode = 6; //6 = auto, 0-5 manual valve setting
+int iAutoValue = 5; //value for valve from MQTT keeps always last updated value 
 
 /***************************
  * Timing
@@ -115,18 +122,8 @@ const unsigned long ulMQTTInterval = 4 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
 const unsigned long ulValveSetInterval = 30 * 1000UL; //set valve, measure temp, send mqtt
 long lValveSetTime = 0;
-const unsigned long ulUpdateLCDInterval = 5 * 1000UL; //Write text on LCD
+const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //Write text on LCD
 long lUpdateLCDTime = 0;
-
-/***************************
- * otherSettings
- **************************/
-#define swBAUD_RATE 115200
-bool bError = false; //Error
-String sErrorText = "";
-String sLastErrorText = ""; //store last Error to send to Server
-bool bErrorDisp = false;
-int iCount = 0; //Counter for display to show its running
 
 /***************************
  * Digital Analog Converter
@@ -145,7 +142,17 @@ int iGY302Adr = 0x23;
 BH1750 lightSensor;
 float fLux = -127;
 #define MIN_BACKLIGHT_LUX 50
-//float minBacklightLux = 50; //if lower Backlight goes off
+
+/***************************
+ * otherSettings
+ **************************/
+#define swBAUD_RATE 115200
+bool bError = false; //Error
+String sErrorText = "";
+String sLastErrorText = ""; //store last Error to send to Server
+bool bErrorDisp = false;
+int iCount = 0;   //Counter for display to show its running
+
 
 //Forward declarations
 void printAddress(DeviceAddress adressen);
@@ -160,7 +167,8 @@ void setup(void)
   Serial.println("");
   Serial.println(sSoftware);
   //TODO Remove if not needed or external PUll UP for Temp Sensor Bus
-  pinMode(12, INPUT_PULLUP);
+  pinMode(ONE_WIRE_PIN, INPUT_PULLUP);
+  pinMode(SWITCH_PIN, INPUT);
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
@@ -173,6 +181,7 @@ void setup(void)
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
+  iAutoValue = 5; 
                     //Light Sensor use high res mode and default adress
   lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
   lightSensor.setMTreg(220); //more resolution
@@ -280,15 +289,16 @@ void loop(void)
     }
     lMQTTTime = millis();
   }
-  // set valve position every 60 seconds to current set position
-  // measure temp and display
+  // slow actions: set valve position every 60 seconds to current set position
+  // measure temp
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
     int iValvVolt;
     bool bDACStatus = false;
     //on Error open valve to full
     if (bError == true)
-      iValvPosSetP = 5;
+       iAutoValue = 5; 
+   
     //Convert position 0-5 to voltage 0-4095
     iValvVolt = map(iValvPosSetP, 0, 5, 0, 4095);
 #ifdef DEBUG
@@ -329,6 +339,8 @@ void loop(void)
     char valueStr[20]; //helper for conversion
     dtostrf(iValvPosSetP, 1, 0, valueStr);
     mqttClient.publish(T_CHANNEL "/ActPos", valueStr);
+    dtostrf(iValvPosSetP, 1, 0, valueStr);
+    mqttClient.publish(T_CHANNEL "/Mode", valueStr);
     dtostrf(data.temp1, 3, 2, valueStr);
     mqttClient.publish(T_CHANNEL "/TempIn", valueStr);
     dtostrf(data.temp2, 3, 2, valueStr);
@@ -351,9 +363,30 @@ void loop(void)
     lValveSetTime = millis();
   }
 
+  //fast actions LCD update, manual switch input
   if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
   {
-    updateLCD();
+        //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
+    if (digitalRead(SWITCH_PIN) == HIGH)
+    {
+      iManMode++;
+      if (iManMode == 7)
+        iManMode = 0;
+    }
+     //manual pos override 
+    if(iManMode <6) 
+    { 
+      //manual get last set value
+     iValvPosSetP = iManMode; 
+    }
+    else 
+    {
+      //auto use last value from MQTT
+      iValvPosSetP = iAutoValue;
+    }
+  Serial.print("Mode: ");
+  Serial.println(iManMode);
+  updateLCD();
     //Measure light and switch on backlight if bright
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
@@ -369,9 +402,10 @@ void loop(void)
 void callback(char *topic, byte *data, unsigned int dataLength)
 {
   // handle message arrived
-  iValvPosSetP = 0;
+  iAutoValue = 0;
 #ifdef DEBUG
-  Serial.println(iValvPosSetP);
+ Serial.print("Remote valve value: ");
+  Serial.println(iAutoValue);
   Serial.print(topic);
   Serial.println(": ");
 #endif
@@ -383,7 +417,7 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
     strncpy(mqttBufValvPos, (char *)data, dataLength);
     mqttBufValvPos[dataLength + 1] = '\0';
-    iValvPosSetP = atoi(mqttBufValvPos);
+    iAutoValue = atoi(mqttBufValvPos);
     //if we recieve MQTT messages everything should be ok again. Reset error.
     bError = false;
     sErrorText = "";
@@ -418,6 +452,8 @@ void updateLCD()
     lcd.setCursor(0, 1);
     lcd.print("Valve:");
     lcd.print(iValvPosSetP);
+    if(iManMode < 6) lcd.print("M");
+    else lcd.print("A");
     bErrorDisp = true; //display error alternately
   }
   lcd.setCursor(15, 1);
