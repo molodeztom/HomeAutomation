@@ -11,20 +11,20 @@ Home Automation Project
   control. Measure IN and OUT Temp. Display values on LCD. Send Temp Values with MQTT. 
 
   History: master if not shown otherwise
-  20200509  V0.1: Copy from Adafruit example for MCP4725A1
-  20200510  V0.2: Output 3 fixed values to test valve behaviour
-  20200510  V0.3: Get SetPoint as MCP digits from MQTT as int and set valve accordingly
-  20201019  V0.4: Converted to visual studio code project
-  20201230  V0.5: Include secrets.h software string output (valveCurTest)
-                  + INA219 sensor tests sucessfull (valveCurTest)
-                  + Temperature Sensor 1 added
-                  c publish current values via mqtt
-  20201230  V0.6: +LCD display with hello world
-  20210101  V0.7: c Values for valve 0-5 instead of 4095
-  20210101  V0.8: + Watchdog for MQTT and error msg display send errors with MQTT to server 
+  20200509  V0.1:  Copy from Adafruit example for MCP4725A1
+  20200510  V0.2:  Output 3 fixed values to test valve behaviour
+  20200510  V0.3:  Get SetPoint as MCP digits from MQTT as int and set valve accordingly
+  20201019  V0.4:  Converted to visual studio code project
+  20201230  V0.5:  Include secrets.h software string output (valveCurTest)
+                   + INA219 sensor tests sucessfull (valveCurTest)
+                   + Temperature Sensor 1 added
+                   c publish current values via mqtt
+  20201230  V0.6:  +LCD display with hello world
+  20210101  V0.7:  c Values for valve 0-5 instead of 4095
+  20210101  V0.8:  + Watchdog for MQTT and error msg display send errors with MQTT to server 
+  20210101  V0.9:  b ActValue leading blanks removed
+  20210102  V0.10: + Light sensor GY-302 BH1750, switch off LCD backlight when dark (sic)
   
-  
-
 
 **************************************************************************/
 
@@ -36,13 +36,14 @@ Home Automation Project
 #include <ArduinoJson.h>
 #include <PubSubClient.h> //MQTT
 #include <LiquidCrystal_I2C.h>
+#include <BH1750.h>
 
 #include "D:\Arduino\HomeAutomationSecrets.h"
 //libs for DS18B20
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.8";
+const String sSoftware = "ValveCtrl V0.10";
 
 /***************************
  * LCD Settings
@@ -116,6 +117,11 @@ const unsigned long ulValveSetInterval = 30 * 1000UL; //set valve, measure temp,
 long lValveSetTime = 0;
 const unsigned long ulUpdateLCDInterval = 5 * 1000UL; //Write text on LCD
 long lUpdateLCDTime = 0;
+
+/***************************
+ * otherSettings
+ **************************/
+#define swBAUD_RATE 115200
 bool bError = false; //Error
 String sErrorText = "";
 String sLastErrorText = ""; //store last Error to send to Server
@@ -123,15 +129,23 @@ bool bErrorDisp = false;
 int iCount = 0; //Counter for display to show its running
 
 /***************************
- * otherSettings
+ * Digital Analog Converter
  **************************/
-#define swBAUD_RATE 115200
 
 Adafruit_MCP4725 dac;
 
 int iMCP4725Adr = 0x60;
 int iMCPMaxCode = 4096; //code for max output
 int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
+
+/***************************
+ * Light Sensor GY-302 BH1750
+ **************************/
+int iGY302Adr = 0x23;
+BH1750 lightSensor;
+float fLux = -127;
+#define MIN_BACKLIGHT_LUX 50
+//float minBacklightLux = 50; //if lower Backlight goes off
 
 //Forward declarations
 void printAddress(DeviceAddress adressen);
@@ -141,6 +155,7 @@ void updateLCD();
 
 void setup(void)
 {
+  bool bDACStatus;
   Serial.begin(swBAUD_RATE);
   Serial.println("");
   Serial.println(sSoftware);
@@ -149,7 +164,18 @@ void setup(void)
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
-  dac.begin(iMCP4725Adr); //init dac with I2C adress
+  bDACStatus = dac.begin(iMCP4725Adr); //init dac with I2C adress
+  if (bDACStatus == false)
+  {
+    bError = true;
+    sErrorText = "06 DACnotFound";
+    Serial.println("06 DAC not found");
+  }
+
+  iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
+                    //Light Sensor use high res mode and default adress
+  lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
+  lightSensor.setMTreg(220); //more resolution
 
   /* LCD */
   lcd.init(); // initialize the lcd
@@ -175,13 +201,11 @@ void setup(void)
   {
     mQTTConnect();
   }
-  Serial.println("Setup done");
-  delay(1000);
 
   //initialize temp sensors
   sensoren.begin();
 
-  //Nun pr�fen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
+  //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
   if (!sensoren.getAddress(adressen, 0))
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
@@ -193,6 +217,7 @@ void setup(void)
   Serial.print("Adresse1: ");
   printAddress(adressen);
   Serial.println();
+#endif
 
   //2. Sensor
   if (!sensoren.getAddress(adressen, 1))
@@ -201,6 +226,7 @@ void setup(void)
     bError = true;
     sErrorText = "01 NoTempSens";
   }
+#ifdef DEBUG
   //adressen anzeigen
 
   Serial.print("Adresse2: ");
@@ -209,7 +235,7 @@ void setup(void)
 #endif
 
 #ifdef DEBUG
-  //Nun setzen wir noch die gew�nschte Aufl�sung (9, 10, 11 oder 12 bit) TODO das ist nur f�r den ersten Sensor oder?
+  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) TODO das ist nur f�r den ersten Sensor oder?
   sensoren.setResolution(adressen, 12);
   Serial.print("Aufl�sung = ");
   Serial.print(sensoren.getResolution(adressen), DEC);
@@ -259,15 +285,24 @@ void loop(void)
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
     int iValvVolt;
+    bool bDACStatus = false;
     //on Error open valve to full
     if (bError == true)
       iValvPosSetP = 5;
     //Convert position 0-5 to voltage 0-4095
     iValvVolt = map(iValvPosSetP, 0, 5, 0, 4095);
+#ifdef DEBUG
     Serial.println("Set Valve to: ");
     Serial.println(iValvPosSetP);
     Serial.println(iValvVolt);
-    dac.setVoltage(iValvVolt, false);
+#endif
+    bDACStatus = dac.setVoltage(iValvVolt, false);
+    if (bDACStatus == false)
+    {
+      bError = true;
+      sErrorText = "06 DACnotFound";
+      Serial.println("06 DAC not found");
+    }
 
     data.temp1 = 0;
     data.temp2 = 0;
@@ -286,21 +321,27 @@ void loop(void)
     Serial.print("Temperatur2: ");
     Serial.print(data.temp2);
     Serial.println("�C");
+    Serial.print("Light: ");
+    Serial.println(fLux);
 #endif
+
+    //Publish values over MQTT
     char valueStr[20]; //helper for conversion
-    dtostrf(iValvPosSetP, 3, 0, valueStr);
+    dtostrf(iValvPosSetP, 1, 0, valueStr);
     mqttClient.publish(T_CHANNEL "/ActPos", valueStr);
     dtostrf(data.temp1, 3, 2, valueStr);
     mqttClient.publish(T_CHANNEL "/TempIn", valueStr);
     dtostrf(data.temp2, 3, 2, valueStr);
     mqttClient.publish(T_CHANNEL "/TempOut", valueStr);
+    dtostrf(fLux, 1, 0, valueStr);
+    mqttClient.publish(T_CHANNEL "/Light", valueStr);
+
     if (bError == true)
     {
       mqttClient.publish(T_CHANNEL "/Err", sLastErrorText.c_str());
-      sLastErrorText = sErrorText; // if more than one error send both 
+      sLastErrorText = sErrorText; // if more than one error send both
     }
-
-    Serial.println("publish");
+    //counter to show alive on LCD
     iCount++;
     if (iCount > 9)
     {
@@ -313,6 +354,14 @@ void loop(void)
   if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
   {
     updateLCD();
+    //Measure light and switch on backlight if bright
+    fLux = lightSensor.readLightLevel();
+    if (fLux < MIN_BACKLIGHT_LUX)
+    {
+      lcd.noBacklight();
+    }
+    else
+      lcd.backlight();
     lUpdateLCDTime = millis();
   }
 }
@@ -321,9 +370,11 @@ void callback(char *topic, byte *data, unsigned int dataLength)
 {
   // handle message arrived
   iValvPosSetP = 0;
+#ifdef DEBUG
   Serial.println(iValvPosSetP);
   Serial.print(topic);
   Serial.println(": ");
+#endif
 
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
@@ -332,9 +383,7 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
     strncpy(mqttBufValvPos, (char *)data, dataLength);
     mqttBufValvPos[dataLength + 1] = '\0';
-    Serial.println(mqttBufValvPos);
     iValvPosSetP = atoi(mqttBufValvPos);
-    Serial.println(iValvPosSetP);
     //if we recieve MQTT messages everything should be ok again. Reset error.
     bError = false;
     sErrorText = "";
@@ -379,8 +428,10 @@ void updateLCD()
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
+#ifdef DEBUG
   Serial.println("WifiStat connecting to ");
   Serial.println(WIFI_SSID);
+#endif
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -412,10 +463,12 @@ void mQTTConnect()
 {
   if (!mqttClient.connected())
   {
+#ifdef DEBUG
     Serial.println("Attempting MQTT connection...");
     Serial.println(MQTT_USERNAME);
     Serial.print(" ");
     Serial.print(MQTT_KEY);
+#endif
     // Attempt to connect
     if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
     {
