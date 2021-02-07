@@ -25,6 +25,7 @@ Home Automation Project
   20210101  V0.9:  b ActValue leading blanks removed
   20210102  V0.10: + Light sensor GY-302 BH1750, switch off LCD backlight when dark (sic)
   20210102  V0.11: + tactile switch for manual valve select
+  20210102  V0.12: + on valve pos 1-2 use pos 3 but open and close in timed intervalls 
   
 
 **************************************************************************/
@@ -44,7 +45,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.10";
+const String sSoftware = "ValveCtrl V0.12";
 
 /***************************
  * LCD Settings
@@ -110,9 +111,12 @@ PubSubClient mqttClient(MQTT_client);
 DATEN_STRUKTUR data;
 const int mqttRecBufSiz = 50;
 char mqttBufValvPos[mqttRecBufSiz];
-int iValvPosSetP; //Setpoint Valve Position
-int iManMode = 6; //6 = auto, 0-5 manual valve setting
-int iAutoValue = 5; //value for valve from MQTT keeps always last updated value 
+int iValvPosSetP;          //Setpoint Valve Position
+int iManMode = 6;          //6 = auto, 0-5 manual valve setting
+int iAutoValue = 5;        //value for valve from MQTT keeps always last updated value
+int iValveIntervalCnt = 0; //Counter valve interval in seconds
+bool bValveOn = true;      //Valve on/off used for interval
+int iActValvPos = 5;       //Valve position actually set 
 
 /***************************
  * Timing
@@ -120,10 +124,12 @@ int iAutoValue = 5; //value for valve from MQTT keeps always last updated value
 
 const unsigned long ulMQTTInterval = 4 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 30 * 1000UL; //set valve, measure temp, send mqtt
+const unsigned long ulValveSetInterval = 60 * 1000UL; //set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
-const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //Write text on LCD
+const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
+int iValvInterval2 = 6 * 60;             //interval valve value 2 6 minutes on/off, can be changed per mqtt remotely
+int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
 
 /***************************
  * Digital Analog Converter
@@ -133,7 +139,6 @@ Adafruit_MCP4725 dac;
 
 int iMCP4725Adr = 0x60;
 int iMCPMaxCode = 4096; //code for max output
-int iValveInitVolt = 5; // Hold for 5 minuts while AC is applied to init valve
 
 /***************************
  * Light Sensor GY-302 BH1750
@@ -151,8 +156,7 @@ bool bError = false; //Error
 String sErrorText = "";
 String sLastErrorText = ""; //store last Error to send to Server
 bool bErrorDisp = false;
-int iCount = 0;   //Counter for display to show its running
-
+int iCount = 0; //Counter for display to show its running
 
 //Forward declarations
 void printAddress(DeviceAddress adressen);
@@ -181,8 +185,10 @@ void setup(void)
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
-  iAutoValue = 5; 
-                    //Light Sensor use high res mode and default adress
+  iAutoValue = 5;
+  iValveIntervalCnt = 0;
+  bValveOn = true;
+  //Light Sensor use high res mode and default adress
   lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
   lightSensor.setMTreg(220); //more resolution
 
@@ -289,21 +295,74 @@ void loop(void)
     }
     lMQTTTime = millis();
   }
-  // slow actions: set valve position every 60 seconds to current set position
+  // slow actions: set valve position every x seconds to current set position
   // measure temp
   if ((unsigned long)(millis() - lValveSetTime) > ulValveSetInterval)
   {
     int iValvVolt;
     bool bDACStatus = false;
+
     //on Error open valve to full
     if (bError == true)
-       iAutoValue = 5; 
-   
+      iAutoValue = 5;
+
+    if (iValvPosSetP == 1)
+    {
+      //on position 1 we use interval on/off
+      if (iValveIntervalCnt >= iValvInterval1)
+      {
+        Serial.println("Int1 triggered");
+        iValveIntervalCnt = 0;
+        if (bValveOn == true)
+        {
+          bValveOn = false; //toggle valve
+          iActValvPos = 0;  //valve off
+          Serial.println("Int1 OFF");
+        }
+        else
+        {
+          bValveOn = true; //toggle valve
+          iActValvPos = 5; //valve full open
+          Serial.println("Int1 ON");
+        }
+      }
+    }
+
+    if (iValvPosSetP == 2)
+    {
+      //on position 2 we use interval on/off
+      if (iValveIntervalCnt >= iValvInterval2)
+      {
+        Serial.println("Int2 triggered");
+        iValveIntervalCnt = 0;
+        if (bValveOn == true)
+        {
+          bValveOn = false; //toggle valve
+          iActValvPos = 0;  //valve off
+          Serial.println("Int2 OFF");
+        }
+        else
+        {
+          bValveOn = true; //toggle valve
+          iActValvPos = 5; //valve full open
+          Serial.println("Int2 ON");
+        }
+      }
+    }
+    if (iValvPosSetP > 2 or iValvPosSetP == 0)
+    {
+      iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
+      bValveOn = true; //on higher levels valve always on according to set value
+      Serial.println("Pos bigger than 2 set ON");
+      Serial.print("to pos: ");
+      Serial.println(iActValvPos);
+    }
+
     //Convert position 0-5 to voltage 0-4095
-    iValvVolt = map(iValvPosSetP, 0, 5, 0, 4095);
+    iValvVolt = map(iActValvPos, 0, 5, 0, 4095);
 #ifdef DEBUG
     Serial.println("Set Valve to: ");
-    Serial.println(iValvPosSetP);
+    Serial.println(iActValvPos);
     Serial.println(iValvVolt);
 #endif
     bDACStatus = dac.setVoltage(iValvVolt, false);
@@ -327,17 +386,17 @@ void loop(void)
 #ifdef DEBUG
     Serial.print("Temperatur1: ");
     Serial.print(data.temp1);
-    Serial.println("�C");
+    Serial.println(" C");
     Serial.print("Temperatur2: ");
     Serial.print(data.temp2);
-    Serial.println("�C");
+    Serial.println(" C");
     Serial.print("Light: ");
     Serial.println(fLux);
 #endif
 
     //Publish values over MQTT
     char valueStr[20]; //helper for conversion
-    dtostrf(iValvPosSetP, 1, 0, valueStr);
+    dtostrf(iValvVolt, 1, 0, valueStr);
     mqttClient.publish(T_CHANNEL "/ActPos", valueStr);
     dtostrf(iValvPosSetP, 1, 0, valueStr);
     mqttClient.publish(T_CHANNEL "/Mode", valueStr);
@@ -363,30 +422,30 @@ void loop(void)
     lValveSetTime = millis();
   }
 
-  //fast actions LCD update, manual switch input
+  //fast actions LCD update, manual switch input; every 1 seconds fixed time
   if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
   {
-        //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
+    //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
     if (digitalRead(SWITCH_PIN) == HIGH)
     {
       iManMode++;
       if (iManMode == 7)
         iManMode = 0;
     }
-     //manual pos override 
-    if(iManMode <6) 
-    { 
+
+    //manual pos override
+    if (iManMode < 6)
+    {
       //manual get last set value
-     iValvPosSetP = iManMode; 
+      iValvPosSetP = iManMode;
     }
-    else 
+    else
     {
       //auto use last value from MQTT
+    
       iValvPosSetP = iAutoValue;
     }
-  Serial.print("Mode: ");
-  Serial.println(iManMode);
-  updateLCD();
+    updateLCD();
     //Measure light and switch on backlight if bright
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
@@ -395,6 +454,8 @@ void loop(void)
     }
     else
       lcd.backlight();
+    iValveIntervalCnt++; //count interval seconds
+
     lUpdateLCDTime = millis();
   }
 }
@@ -402,18 +463,20 @@ void loop(void)
 void callback(char *topic, byte *data, unsigned int dataLength)
 {
   // handle message arrived
-  iAutoValue = 0;
+
 #ifdef DEBUG
- Serial.print("Remote valve value: ");
+  Serial.print("Remote valve value: ");
   Serial.println(iAutoValue);
+  Serial.println("Topic Recvd: ");
   Serial.print(topic);
-  Serial.println(": ");
+
 #endif
 
   // check topic and handle assuming there is only one INT in buffer
   // we receive number as a string in MQTT, so read string and convert to int
   if (strcmp(topic, T_CHANNEL "/SetPos") == 0)
   {
+    // valve mode value
     memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
     strncpy(mqttBufValvPos, (char *)data, dataLength);
     mqttBufValvPos[dataLength + 1] = '\0';
@@ -421,6 +484,19 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     //if we recieve MQTT messages everything should be ok again. Reset error.
     bError = false;
     sErrorText = "";
+  }
+  else if (strcmp(topic, T_CHANNEL "/SetInt") == 0)
+  {
+    // interval lenght for mode 1-2
+    memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
+    strncpy(mqttBufValvPos, (char *)data, dataLength);
+    mqttBufValvPos[dataLength + 1] = '\0';
+    iValvInterval2 = atoi(mqttBufValvPos);
+    iValvInterval1 = iValvInterval2 * 2;
+#ifdef DEBUG
+    Serial.print("Interval Set to: ");
+    Serial.println(iValvInterval2);
+#endif
   }
 }
 
@@ -450,10 +526,19 @@ void updateLCD()
   else
   {
     lcd.setCursor(0, 1);
-    lcd.print("Valve:");
+    lcd.print("Vent:");
     lcd.print(iValvPosSetP);
-    if(iManMode < 6) lcd.print("M");
-    else lcd.print("A");
+    //display man / auto mode
+    if (iManMode < 6)
+      lcd.print(" Man");
+    else
+      lcd.print(" Aut");
+    //display on/off
+    if (bValveOn == true)
+      lcd.print(" Auf");
+    else
+      lcd.print(" Zu");
+
     bErrorDisp = true; //display error alternately
   }
   lcd.setCursor(15, 1);
@@ -515,6 +600,11 @@ void mQTTConnect()
       if (subscribeOK)
       {
         Serial.println("subscribed ValvPos");
+      }
+      subscribeOK = mqttClient.subscribe(T_CHANNEL "/SetInt");
+      if (subscribeOK)
+      {
+        Serial.println("subscribed Interval");
       }
 
       mqttClient.setCallback(callback);
