@@ -31,6 +31,10 @@
 		{
 			"name": "LCDTest",
 			"path": "..\\LCDTest"
+		},
+		{
+			"name": "Lightning seonsor",
+			"path": "Lightning seonsor"
 		}
 	],
 	"settings": {}
