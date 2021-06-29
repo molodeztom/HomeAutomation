@@ -1,0 +1,5 @@
+# DDL
+DROP CONTINUOUS QUERY cq_5min_SLoc_fHumi ON HomeAutomation
+DROP CONTINUOUS QUERY cq_5min_SLoc_fAtmo ON HomeAutomation
+
+# DML
