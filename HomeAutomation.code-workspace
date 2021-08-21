@@ -35,6 +35,10 @@
 		{
 			"name": "Lightning seonsor",
 			"path": "Lightning seonsor"
+		},
+		{
+			"name": "Kaminari Lightning Sensor",
+			"path": "..\\Kaminari Lightning Sensor"
 		}
 	],
 	"settings": {}
