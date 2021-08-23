@@ -26,12 +26,16 @@ Home Automation Project
   20210102  V0.10: + Light sensor GY-302 BH1750, switch off LCD backlight when dark (sic)
   20210102  V0.11: + tactile switch for manual valve select
   20210102  V0.12: + on valve pos 1-2 use pos 3 but open and close in timed intervalls 
+  20210821  V0.13: c PCB Hardware introduced testing
+ 
+
   
 
 **************************************************************************/
 
 #include <Arduino.h>
 #define DEBUG
+#define DEBUG_LCD
 #include <Wire.h>
 #include <Adafruit_MCP4725.h>
 #include <ESP8266WiFi.h>
@@ -45,7 +49,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.12";
+const String sSoftware = "ValveCtrl V0.13.1";
 
 /***************************
  * LCD Settings
@@ -116,7 +120,7 @@ int iManMode = 6;          //6 = auto, 0-5 manual valve setting
 int iAutoValue = 5;        //value for valve from MQTT keeps always last updated value
 int iValveIntervalCnt = 0; //Counter valve interval in seconds
 bool bValveOn = true;      //Valve on/off used for interval
-int iActValvPos = 5;       //Valve position actually set 
+int iActValvPos = 5;       //Valve position actually set
 
 /***************************
  * Timing
@@ -176,12 +180,28 @@ void setup(void)
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
+  /* LCD */
+  lcd.init(); // initialize the lcd
+  lcd.backlight();
+  //lcd.noBacklight();
+  lcd.setCursor(0, 0);
+  lcd.print("Init");
+  lcd.setCursor(0, 1);
+  lcd.print(sSoftware);
+  delay(10000);
+
   bDACStatus = dac.begin(iMCP4725Adr); //init dac with I2C adress
   if (bDACStatus == false)
   {
     bError = true;
     sErrorText = "06 DACnotFound";
     Serial.println("06 DAC not found");
+#ifdef DEBUG_LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("DAC not found");
+    delay(10000);
+#endif
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
@@ -189,17 +209,9 @@ void setup(void)
   iValveIntervalCnt = 0;
   bValveOn = true;
   //Light Sensor use high res mode and default adress
-  lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
-  lightSensor.setMTreg(220); //more resolution
-
-  /* LCD */
-  lcd.init(); // initialize the lcd
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Init");
-  lcd.setCursor(0, 1);
-  lcd.print(sSoftware);
-  delay(3000);
+  //TODO reactivate when light Sensor is connected
+  // lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
+  // lightSensor.setMTreg(220); //more resolution
 
   //WIFI Setup
   WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -211,7 +223,13 @@ void setup(void)
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
   mqttClient.setServer(SERVER, SERVERPORT);
-  //Connect mQTT
+//Connect mQTT
+#ifdef DEBUG_LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("D0 connect MQTT");
+  delay(10000);
+#endif
   if (!mqttClient.connected())
   {
     mQTTConnect();
@@ -226,6 +244,12 @@ void setup(void)
     Serial.println("0: Kein Temperatursensor vorhanden!");
     bError = true;
     sErrorText = "01 NoTempSens";
+#ifdef DEBUG_LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("D1 NoTempSens");
+    delay(10000);
+#endif
   }
 //adressen anzeigen
 #ifdef DEBUG
@@ -240,6 +264,12 @@ void setup(void)
     Serial.println("1: Kein Temperatursensor vorhanden!");
     bError = true;
     sErrorText = "01 NoTempSens";
+#ifdef DEBUG_LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("D2 NoTempSens2");
+    delay(1000);
+#endif
   }
 #ifdef DEBUG
   //adressen anzeigen
@@ -256,7 +286,12 @@ void setup(void)
   Serial.print(sensoren.getResolution(adressen), DEC);
   Serial.println();
 #endif
-
+#ifdef DEBUG_LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("D3 request Temperature");
+  delay(1000);
+#endif
   //Temperaturmessung starten
   sensoren.requestTemperatures();
 
@@ -269,6 +304,12 @@ void setup(void)
   Serial.println("Setup done");
   delay(1000);
   lValveSetTime = ulValveSetInterval - 100; //trigger event sooner
+#ifdef DEBUG_LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("D4 Setup Done");
+  delay(1000);
+#endif
 }
 
 void loop(void)
@@ -352,7 +393,7 @@ void loop(void)
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
       iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
-      bValveOn = true; //on higher levels valve always on according to set value
+      bValveOn = true;            //on higher levels valve always on according to set value
       Serial.println("Pos bigger than 2 set ON");
       Serial.print("to pos: ");
       Serial.println(iActValvPos);
@@ -425,14 +466,16 @@ void loop(void)
   //fast actions LCD update, manual switch input; every 1 seconds fixed time
   if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
   {
+
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
+    /* TODO change to input to I2C converter
     if (digitalRead(SWITCH_PIN) == HIGH)
     {
       iManMode++;
       if (iManMode == 7)
         iManMode = 0;
     }
-
+*/
     //manual pos override
     if (iManMode < 6)
     {
@@ -442,11 +485,13 @@ void loop(void)
     else
     {
       //auto use last value from MQTT
-    
+
       iValvPosSetP = iAutoValue;
     }
+
     updateLCD();
     //Measure light and switch on backlight if bright
+    /*
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -454,6 +499,7 @@ void loop(void)
     }
     else
       lcd.backlight();
+    */
     iValveIntervalCnt++; //count interval seconds
 
     lUpdateLCDTime = millis();
@@ -589,6 +635,7 @@ void mQTTConnect()
     Serial.println(MQTT_USERNAME);
     Serial.print(" ");
     Serial.print(MQTT_KEY);
+
 #endif
     // Attempt to connect
     if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
