@@ -26,7 +26,8 @@ Home Automation Project
   20210102  V0.10: + Light sensor GY-302 BH1750, switch off LCD backlight when dark (sic)
   20210102  V0.11: + tactile switch for manual valve select
   20210102  V0.12: + on valve pos 1-2 use pos 3 but open and close in timed intervalls 
-  20210821  V0.13: c PCB Hardware introduced testing
+  20210821  V0.13: c PCB Hardware introduced testing 
+  20210821  V0.14: + OTA
  
 
   
@@ -34,6 +35,7 @@ Home Automation Project
 **************************************************************************/
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #define DEBUG
 #define DEBUG_LCD
 #include <Wire.h>
@@ -49,7 +51,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.13.1";
+const String sSoftware = "ValveCtrl V0.14";
 
 /***************************
  * LCD Settings
@@ -97,7 +99,7 @@ struct DATEN_STRUKTUR
 };
 
 /***************************
- * MQTT Settings
+ * WiFI and MQTT Settings
  **************************/
 WiFiClient MQTT_client;
 PubSubClient mqttClient(MQTT_client);
@@ -108,6 +110,7 @@ PubSubClient mqttClient(MQTT_client);
 #define USERNAME "TestName/"
 #define T_CHANNEL "ValveControl"
 #define T_COMMAND "command"
+#define MYHOSTNAME "ValveControl"
 
 /***************************
  * Measurement Variables
@@ -222,8 +225,14 @@ void setup(void)
     WiFi.macAddress(macAddr);
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
+  //OTA Setup PWD comes from HomeAutomationSecrets.h outside repository
+  ArduinoOTA.setHostname(MYHOSTNAME);
+  ArduinoOTA.setPassword(OTA_PWD);
+  ArduinoOTA.begin();
+
+  //Connect mQTT
   mqttClient.setServer(SERVER, SERVERPORT);
-//Connect mQTT
+
 #ifdef DEBUG_LCD
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -466,6 +475,8 @@ void loop(void)
   //fast actions LCD update, manual switch input; every 1 seconds fixed time
   if ((unsigned long)(millis() - lUpdateLCDTime) > ulUpdateLCDInterval)
   {
+    //OTA Functions
+    ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
     /* TODO change to input to I2C converter
@@ -595,6 +606,7 @@ void updateLCD()
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
+  WiFi.hostname(MYHOSTNAME);
 #ifdef DEBUG
   Serial.println("WifiStat connecting to ");
   Serial.println(WIFI_SSID);
