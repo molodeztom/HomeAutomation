@@ -28,6 +28,7 @@ Home Automation Project
   20210102  V0.12: + on valve pos 1-2 use pos 3 but open and close in timed intervalls 
   20210821  V0.13: c PCB Hardware introduced testing 
   20210821  V0.14: + OTA
+  20210826  V0.15: + PC875 parallel to I2C interface
  
 
   
@@ -51,7 +52,7 @@ Home Automation Project
 #include "Spi.h"
 #include <DallasTemperature.h>
 
-const String sSoftware = "ValveCtrl V0.14";
+const String sSoftware = "ValveCtrl V0.15";
 
 /***************************
  * LCD Settings
@@ -156,6 +157,12 @@ float fLux = -127;
 #define MIN_BACKLIGHT_LUX 50
 
 /***************************
+ * PCF8574C I2C to parallel if
+ **************************/
+int iPCF8574Adr = 0x20;
+bool TestLed = false;
+
+/***************************
  * otherSettings
  **************************/
 #define swBAUD_RATE 115200
@@ -170,6 +177,9 @@ void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
 void updateLCD();
+void pf575_write(uint16_t data);
+
+
 
 void setup(void)
 {
@@ -182,6 +192,10 @@ void setup(void)
   pinMode(SWITCH_PIN, INPUT);
 
   Wire.begin(SDA_PIN, SCL_PIN);
+
+  /* PCF8575 */
+  //set all ports as output
+  pf575_write(word(B11111111, B11111111));
 
   /* LCD */
   lcd.init(); // initialize the lcd
@@ -328,6 +342,19 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
+      //PF575 on off test TODO remove
+    
+    if (TestLed == true)
+    {
+      pf575_write(word(B00000000, B00000001));
+      TestLed = false; 
+    }
+    else
+    {
+      pf575_write(word(B00000000, B00000000));
+      TestLed = true;
+    }
+   
     if (bMQTTalive == false)
     {
       Serial.println(" mqttClient loop failure");
@@ -351,6 +378,8 @@ void loop(void)
   {
     int iValvVolt;
     bool bDACStatus = false;
+
+  
 
     //on Error open valve to full
     if (bError == true)
@@ -690,4 +719,12 @@ void printAddress(DeviceAddress adressen)
     Serial.print(adressen[i], HEX);
     Serial.print(":");
   }
+}
+
+void pf575_write(uint16_t data)
+{
+  Wire.beginTransmission(iPCF8574Adr);
+  Wire.write(lowByte(data));
+  Wire.write(highByte(data));
+  Wire.endTransmission();
 }
