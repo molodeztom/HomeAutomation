@@ -29,6 +29,9 @@ Home Automation Project
   20210821  V0.13: c PCB Hardware introduced testing 
   20210821  V0.14: + OTA
   20210826  V0.15: + PC875 parallel to I2C interface
+  20210828  V0.16: + https://github.com/xreef/PCF8575_library
+  20210829  V0.17: c use PC8575 lib for breadboard tests
+  20210829  V0.18: c Input with tactile switch over PC857x now working, debut codes removed
  
 
   
@@ -51,8 +54,9 @@ Home Automation Project
 //libs for DS18B20
 #include "Spi.h"
 #include <DallasTemperature.h>
+#include "PCF8575.h"
 
-const String sSoftware = "ValveCtrl V0.15";
+const String sSoftware = "ValveCtrl V0.18";
 
 /***************************
  * LCD Settings
@@ -64,7 +68,6 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 char
 // For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5, D7=13
 #define SDA_PIN 4
 #define SCL_PIN 5
-#define SWITCH_PIN 13
 #define ONE_WIRE_PIN 12
 
 /***************************
@@ -120,7 +123,7 @@ DATEN_STRUKTUR data;
 const int mqttRecBufSiz = 50;
 char mqttBufValvPos[mqttRecBufSiz];
 int iValvPosSetP;          //Setpoint Valve Position
-int iManMode = 6;          //6 = auto, 0-5 manual valve setting
+int iManMode = 3;          //6 = auto, 0-5 manual valve setting
 int iAutoValue = 5;        //value for valve from MQTT keeps always last updated value
 int iValveIntervalCnt = 0; //Counter valve interval in seconds
 bool bValveOn = true;      //Valve on/off used for interval
@@ -132,9 +135,9 @@ int iActValvPos = 5;       //Valve position actually set
 
 const unsigned long ulMQTTInterval = 4 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 60 * 1000UL; //set valve, measure temp, send mqtt  60 sec
+const unsigned long ulValveSetInterval = 10 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
-const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //Write text on LCD, get button, count time for valve interval, do not change
+const unsigned long ulUpdateLCDInterval = 5 * 100UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
 int iValvInterval2 = 6 * 60;             //interval valve value 2 6 minutes on/off, can be changed per mqtt remotely
 int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
@@ -157,10 +160,12 @@ float fLux = -127;
 #define MIN_BACKLIGHT_LUX 50
 
 /***************************
- * PCF8574C I2C to parallel if
+ * PCF857XC I2C to parallel if
  **************************/
-int iPCF8574Adr = 0x20;
+int iPCF857XAdr = 0x20;
 bool TestLed = false;
+bool bKeyPressed = false;
+PCF8575 pcf857X(iPCF857XAdr);
 
 /***************************
  * otherSettings
@@ -177,9 +182,6 @@ void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
 void updateLCD();
-void pf575_write(uint16_t data);
-
-
 
 void setup(void)
 {
@@ -187,15 +189,15 @@ void setup(void)
   Serial.begin(swBAUD_RATE);
   Serial.println("");
   Serial.println(sSoftware);
-  //TODO Remove if not needed or external PUll UP for Temp Sensor Bus
   pinMode(ONE_WIRE_PIN, INPUT_PULLUP);
-  pinMode(SWITCH_PIN, INPUT);
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
   /* PCF8575 */
-  //set all ports as output
-  pf575_write(word(B11111111, B11111111));
+  //set port 0 as output ad port 1 as input TODO adjust
+  pcf857X.pinMode(P0, OUTPUT);
+  pcf857X.pinMode(P1, INPUT);
+  pcf857X.pinMode(P2, INPUT);
 
   /* LCD */
   lcd.init(); // initialize the lcd
@@ -213,12 +215,6 @@ void setup(void)
     bError = true;
     sErrorText = "06 DACnotFound";
     Serial.println("06 DAC not found");
-#ifdef DEBUG_LCD
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("DAC not found");
-    delay(10000);
-#endif
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
@@ -247,16 +243,13 @@ void setup(void)
   //Connect mQTT
   mqttClient.setServer(SERVER, SERVERPORT);
 
-#ifdef DEBUG_LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("D0 connect MQTT");
-  delay(10000);
-#endif
   if (!mqttClient.connected())
   {
     mQTTConnect();
   }
+
+  //initialize pcf8574
+  pcf857X.begin();
 
   //initialize temp sensors
   sensoren.begin();
@@ -266,13 +259,7 @@ void setup(void)
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "01 NoTempSens";
-#ifdef DEBUG_LCD
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("D1 NoTempSens");
-    delay(10000);
-#endif
+    sErrorText = "01 NoTempSens1";
   }
 //adressen anzeigen
 #ifdef DEBUG
@@ -286,13 +273,7 @@ void setup(void)
   {
     Serial.println("1: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "01 NoTempSens";
-#ifdef DEBUG_LCD
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("D2 NoTempSens2");
-    delay(1000);
-#endif
+    sErrorText = "01 NoTempSens2";
   }
 #ifdef DEBUG
   //adressen anzeigen
@@ -309,12 +290,7 @@ void setup(void)
   Serial.print(sensoren.getResolution(adressen), DEC);
   Serial.println();
 #endif
-#ifdef DEBUG_LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("D3 request Temperature");
-  delay(1000);
-#endif
+
   //Temperaturmessung starten
   sensoren.requestTemperatures();
 
@@ -327,12 +303,6 @@ void setup(void)
   Serial.println("Setup done");
   delay(1000);
   lValveSetTime = ulValveSetInterval - 100; //trigger event sooner
-#ifdef DEBUG_LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("D4 Setup Done");
-  delay(1000);
-#endif
 }
 
 void loop(void)
@@ -342,19 +312,7 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
-      //PF575 on off test TODO remove
-    
-    if (TestLed == true)
-    {
-      pf575_write(word(B00000000, B00000001));
-      TestLed = false; 
-    }
-    else
-    {
-      pf575_write(word(B00000000, B00000000));
-      TestLed = true;
-    }
-   
+
     if (bMQTTalive == false)
     {
       Serial.println(" mqttClient loop failure");
@@ -365,6 +323,12 @@ void loop(void)
         sLastErrorText = "04 NoWLAN";
       }
     }
+    /* TODO remove test output with LED
+    pcf857X.digitalWrite(P0, HIGH);
+    delay(500);
+    pcf857X.digitalWrite(P0, LOW);
+    */
+
     //--------------------------check MQTT connection
     if (!mqttClient.connected())
     {
@@ -378,8 +342,6 @@ void loop(void)
   {
     int iValvVolt;
     bool bDACStatus = false;
-
-  
 
     //on Error open valve to full
     if (bError == true)
@@ -508,14 +470,19 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-    /* TODO change to input to I2C converter
-    if (digitalRead(SWITCH_PIN) == HIGH)
+
+    uint8_t val = pcf857X.digitalRead(P1);
+    if (val == HIGH)
+      bKeyPressed = true;
+    else
+      bKeyPressed = false;
+    if (bKeyPressed)
     {
       iManMode++;
       if (iManMode == 7)
         iManMode = 0;
     }
-*/
+
     //manual pos override
     if (iManMode < 6)
     {
@@ -530,6 +497,7 @@ void loop(void)
     }
 
     updateLCD();
+
     //Measure light and switch on backlight if bright
     /*
     fLux = lightSensor.readLightLevel();
@@ -719,12 +687,4 @@ void printAddress(DeviceAddress adressen)
     Serial.print(adressen[i], HEX);
     Serial.print(":");
   }
-}
-
-void pf575_write(uint16_t data)
-{
-  Wire.beginTransmission(iPCF8574Adr);
-  Wire.write(lowByte(data));
-  Wire.write(highByte(data));
-  Wire.endTransmission();
 }
