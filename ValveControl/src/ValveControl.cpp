@@ -32,6 +32,8 @@ Home Automation Project
   20210828  V0.16: + https://github.com/xreef/PCF8575_library
   20210829  V0.17: c use PC8575 lib for breadboard tests
   20210829  V0.18: c Input with tactile switch over PC857x now working, debut codes removed
+  20210829  V0.19: c Lightsensor back to code
+  20210830  V0.20: c Timing back to original values (due to mqtt connect errors), Valve ON display bug corrected
  
 
   
@@ -40,8 +42,7 @@ Home Automation Project
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-#define DEBUG
-#define DEBUG_LCD
+//#define DEBUG
 #include <Wire.h>
 #include <Adafruit_MCP4725.h>
 #include <ESP8266WiFi.h>
@@ -56,7 +57,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8575.h"
 
-const String sSoftware = "ValveCtrl V0.18";
+const String sSoftware = "ValveCtrl V0.20";
 
 /***************************
  * LCD Settings
@@ -133,11 +134,11 @@ int iActValvPos = 5;       //Valve position actually set
  * Timing
  **************************/
 
-const unsigned long ulMQTTInterval = 4 * 1000UL; //call MQTT server
+const unsigned long ulMQTTInterval = 3 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 10 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
+const unsigned long ulValveSetInterval = 60 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
-const unsigned long ulUpdateLCDInterval = 5 * 100UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
+const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
 int iValvInterval2 = 6 * 60;             //interval valve value 2 6 minutes on/off, can be changed per mqtt remotely
 int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
@@ -213,8 +214,8 @@ void setup(void)
   if (bDACStatus == false)
   {
     bError = true;
-    sErrorText = "06 DACnotFound";
-    Serial.println("06 DAC not found");
+    sErrorText = "6 DACnotFound ";
+    Serial.println("6 DAC not found   ");
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
@@ -223,8 +224,8 @@ void setup(void)
   bValveOn = true;
   //Light Sensor use high res mode and default adress
   //TODO reactivate when light Sensor is connected
-  // lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
-  // lightSensor.setMTreg(220); //more resolution
+  lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
+  lightSensor.setMTreg(220); //more resolution
 
   //WIFI Setup
   WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -257,9 +258,9 @@ void setup(void)
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
   if (!sensoren.getAddress(adressen, 0))
   {
-    Serial.println("0: Kein Temperatursensor vorhanden!");
+    Serial.println("1: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "01 NoTempSens1";
+    sErrorText = "1 No TempSens1   ";
   }
 //adressen anzeigen
 #ifdef DEBUG
@@ -273,7 +274,7 @@ void setup(void)
   {
     Serial.println("1: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "01 NoTempSens2";
+    sErrorText = "1 No TempSens2  ";
   }
 #ifdef DEBUG
   //adressen anzeigen
@@ -317,10 +318,10 @@ void loop(void)
     {
       Serial.println(" mqttClient loop failure");
       bError = true;
-      sErrorText = "02 MQTTFailure";
+      sErrorText = "2 MQTTFailure   ";
       if (WiFi.status() not_eq WL_CONNECTED)
       {
-        sLastErrorText = "04 NoWLAN";
+        sLastErrorText = "4 No WLAN         ";
       }
     }
     /* TODO remove test output with LED
@@ -393,7 +394,8 @@ void loop(void)
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
       iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
-      bValveOn = true;            //on higher levels valve always on according to set value
+      if(iValvPosSetP == 0) bValveOn = false;
+      else  bValveOn = true;            //on higher levels valve always on according to set value
       Serial.println("Pos bigger than 2 set ON");
       Serial.print("to pos: ");
       Serial.println(iActValvPos);
@@ -411,7 +413,7 @@ void loop(void)
     {
       bError = true;
       sErrorText = "06 DACnotFound";
-      Serial.println("06 DAC not found");
+      Serial.println("6 DAC not found");
     }
 
     data.temp1 = 0;
@@ -452,7 +454,10 @@ void loop(void)
     {
       mqttClient.publish(T_CHANNEL "/Err", sLastErrorText.c_str());
       sLastErrorText = sErrorText; // if more than one error send both
+ 
     }
+   
+  
     //counter to show alive on LCD
     iCount++;
     if (iCount > 9)
@@ -499,7 +504,7 @@ void loop(void)
     updateLCD();
 
     //Measure light and switch on backlight if bright
-    /*
+    
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -507,7 +512,7 @@ void loop(void)
     }
     else
       lcd.backlight();
-    */
+    
     iValveIntervalCnt++; //count interval seconds
 
     lUpdateLCDTime = millis();
@@ -558,16 +563,18 @@ void updateLCD()
 {
   // Write display we have 2 columns with each 16 characters
   char valueStr[20]; //helper for conversion
-  lcd.clear();
+  //lcd.clear();
   lcd.createChar(0, gradeChar);
   lcd.setCursor(0, 0);
   lcd.print("I:");
   dtostrf(data.temp1, 3, 1, valueStr);
   lcd.print(valueStr);
+  lcd.setCursor(6, 0);
   lcd.print(" O:");
   dtostrf(data.temp2, 3, 1, valueStr);
   lcd.print(valueStr);
   lcd.print(" ");
+  lcd.setCursor(14, 0);
   lcd.write(0);
   lcd.print("C");
 
@@ -591,7 +598,7 @@ void updateLCD()
     if (bValveOn == true)
       lcd.print(" Auf");
     else
-      lcd.print(" Zu");
+      lcd.print(" Zu ");
 
     bErrorDisp = true; //display error alternately
   }
@@ -670,9 +677,9 @@ void mQTTConnect()
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
       bError = true;
-      sErrorText = "03 MQTTConFail";
+      sErrorText = "3 MQTTConFail  ";
       if (WiFi.status() not_eq WL_CONNECTED)
-        sErrorText = "05 NoWLAN";
+        sErrorText = "5 No WLAN          ";
     }
   }
 }
