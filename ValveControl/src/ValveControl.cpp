@@ -34,6 +34,7 @@ Home Automation Project
   20210829  V0.18: c Input with tactile switch over PC857x now working, debut codes removed
   20210829  V0.19: c Lightsensor back to code
   20210830  V0.20: c Timing back to original values (due to mqtt connect errors), Valve ON display bug corrected
+  20210830  V0.21: + ErrorNumber to reset errors specifically
  
 
   
@@ -57,7 +58,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8575.h"
 
-const String sSoftware = "ValveCtrl V0.20";
+const String sSoftware = "ValveCtrl V0.21";
 
 /***************************
  * LCD Settings
@@ -136,7 +137,7 @@ int iActValvPos = 5;       //Valve position actually set
 
 const unsigned long ulMQTTInterval = 3 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 60 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
+const unsigned long ulValveSetInterval = 10 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
 const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
@@ -176,7 +177,8 @@ bool bError = false; //Error
 String sErrorText = "";
 String sLastErrorText = ""; //store last Error to send to Server
 bool bErrorDisp = false;
-int iCount = 0; //Counter for display to show its running
+int iCount = 0;     //Counter for display to show its running
+int iErrNumber = 0; //helper to reset an error, is set to error if condition of that error not true bError is reset
 
 //Forward declarations
 void printAddress(DeviceAddress adressen);
@@ -214,8 +216,9 @@ void setup(void)
   if (bDACStatus == false)
   {
     bError = true;
-    sErrorText = "6 DACnotFound ";
-    Serial.println("6 DAC not found   ");
+    iErrNumber = 1;
+    sErrorText = "1 DACnotFound ";
+    Serial.println("1 DAC not found   ");
   }
 
   iValvPosSetP = 5; //Initial value for valve should be 5 V. The valve will automatically recognize 0-10 V regulation mode.
@@ -258,9 +261,10 @@ void setup(void)
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
   if (!sensoren.getAddress(adressen, 0))
   {
-    Serial.println("1: Kein Temperatursensor vorhanden!");
+    Serial.println("2: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "1 No TempSens1   ";
+    iErrNumber = 2;
+    sErrorText = "2 No TempSens1   ";
   }
 //adressen anzeigen
 #ifdef DEBUG
@@ -272,9 +276,10 @@ void setup(void)
   //2. Sensor
   if (!sensoren.getAddress(adressen, 1))
   {
-    Serial.println("1: Kein Temperatursensor vorhanden!");
+    Serial.println("3: Kein Temperatursensor vorhanden!");
     bError = true;
-    sErrorText = "1 No TempSens2  ";
+    iErrNumber = 3;
+    sErrorText = "3 No TempSens2  ";
   }
 #ifdef DEBUG
   //adressen anzeigen
@@ -314,26 +319,38 @@ void loop(void)
   {
     bool bMQTTalive = mqttClient.loop();
 
-    if (bMQTTalive == false)
+    if (WiFi.status() not_eq WL_CONNECTED)
     {
-      Serial.println(" mqttClient loop failure");
+      sErrorText = "5 No WLAN         ";
+      iErrNumber = 5;
       bError = true;
-      sErrorText = "2 MQTTFailure   ";
-      if (WiFi.status() not_eq WL_CONNECTED)
-      {
-        sLastErrorText = "4 No WLAN         ";
-      }
     }
-    /* TODO remove test output with LED
-    pcf857X.digitalWrite(P0, HIGH);
-    delay(500);
-    pcf857X.digitalWrite(P0, LOW);
-    */
-
-    //--------------------------check MQTT connection
-    if (!mqttClient.connected())
+    else
     {
-      mQTTConnect();
+      //WLAN ok check MQTT
+      if (bMQTTalive == false)
+      {
+        Serial.println(" mqttClient loop failure");
+        bError = true;
+        iErrNumber = 4;
+        sErrorText = "4 MQTTFailure   ";
+      }
+      else
+      {
+        //Mqtt works reset anz WLAN or mqtt error
+        if ((iErrNumber == 4) | (iErrNumber == 5))
+        {
+          //reset previous MQTT or WLAN error and try again
+          bError = false;
+          iErrNumber = 0;
+        }
+      }
+
+      //--------------------------check MQTT connection and retry
+      if (!mqttClient.connected())
+      {
+        mQTTConnect();
+      }
     }
     lMQTTTime = millis();
   }
@@ -394,11 +411,10 @@ void loop(void)
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
       iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
-      if(iValvPosSetP == 0) bValveOn = false;
-      else  bValveOn = true;            //on higher levels valve always on according to set value
-      Serial.println("Pos bigger than 2 set ON");
-      Serial.print("to pos: ");
-      Serial.println(iActValvPos);
+      if (iValvPosSetP == 0)
+        bValveOn = false;
+      else
+        bValveOn = true; //on higher levels valve always on according to set value
     }
 
     //Convert position 0-5 to voltage 0-4095
@@ -412,8 +428,18 @@ void loop(void)
     if (bDACStatus == false)
     {
       bError = true;
-      sErrorText = "06 DACnotFound";
+      iErrNumber = 6;
+      sErrorText = "6 DACnotFound";
       Serial.println("6 DAC not found");
+    }
+    else
+    {
+      if (iErrNumber == 6)
+      {
+        //reset error
+        bError = false;
+        iErrNumber = 0;
+      }
     }
 
     data.temp1 = 0;
@@ -454,10 +480,8 @@ void loop(void)
     {
       mqttClient.publish(T_CHANNEL "/Err", sLastErrorText.c_str());
       sLastErrorText = sErrorText; // if more than one error send both
- 
     }
-   
-  
+
     //counter to show alive on LCD
     iCount++;
     if (iCount > 9)
@@ -504,7 +528,7 @@ void loop(void)
     updateLCD();
 
     //Measure light and switch on backlight if bright
-    
+
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -512,7 +536,7 @@ void loop(void)
     }
     else
       lcd.backlight();
-    
+
     iValveIntervalCnt++; //count interval seconds
 
     lUpdateLCDTime = millis();
@@ -541,8 +565,13 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     mqttBufValvPos[dataLength + 1] = '\0';
     iAutoValue = atoi(mqttBufValvPos);
     //if we recieve MQTT messages everything should be ok again. Reset error.
-    bError = false;
-    sErrorText = "";
+
+    if ((iErrNumber == 4) | (iErrNumber == 5))
+    {
+      //reset previous MQTT or WLAN error and try again
+      bError = false;
+      iErrNumber = 0;
+    }
   }
   else if (strcmp(topic, T_CHANNEL "/SetInt") == 0)
   {
@@ -657,18 +686,10 @@ void mQTTConnect()
     if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
     {
       Serial.println("connected");
-      // mqttClient.publish("Test", "Test from Valve Control");
-      bool subscribeOK = false;
-      subscribeOK = mqttClient.subscribe(T_CHANNEL "/SetPos");
-      if (subscribeOK)
-      {
-        Serial.println("subscribed ValvPos");
-      }
-      subscribeOK = mqttClient.subscribe(T_CHANNEL "/SetInt");
-      if (subscribeOK)
-      {
-        Serial.println("subscribed Interval");
-      }
+
+      mqttClient.subscribe(T_CHANNEL "/SetPos");
+
+      mqttClient.subscribe(T_CHANNEL "/SetInt");
 
       mqttClient.setCallback(callback);
     }
@@ -677,9 +698,8 @@ void mQTTConnect()
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
       bError = true;
-      sErrorText = "3 MQTTConFail  ";
-      if (WiFi.status() not_eq WL_CONNECTED)
-        sErrorText = "5 No WLAN          ";
+      iErrNumber = 4;
+      sErrorText = "4 MQTTFailure   ";
     }
   }
 }
