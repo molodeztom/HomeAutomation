@@ -35,6 +35,7 @@ Home Automation Project
   20210829  V0.19: c Lightsensor back to code
   20210830  V0.20: c Timing back to original values (due to mqtt connect errors), Valve ON display bug corrected
   20210830  V0.21: + ErrorNumber to reset errors specifically
+  20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LED 1
  
 
   
@@ -163,6 +164,7 @@ float fLux = -127;
 
 /***************************
  * PCF857XC I2C to parallel if
+ * TODO: change to PCF8574 
  **************************/
 int iPCF857XAdr = 0x20;
 bool TestLed = false;
@@ -499,11 +501,12 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-
+/*TODO disabled Key for new Ctrl PCB
     uint8_t val = pcf857X.digitalRead(P1);
     if (val == HIGH)
       bKeyPressed = true;
     else
+    */
       bKeyPressed = false;
     if (bKeyPressed)
     {
