@@ -57,9 +57,9 @@ Home Automation Project
 //libs for DS18B20
 #include "Spi.h"
 #include <DallasTemperature.h>
-#include "PCF8575.h"
+#include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V0.21";
+const String sSoftware = "ValveCtrl V0.22";
 
 /***************************
  * LCD Settings
@@ -168,8 +168,10 @@ float fLux = -127;
  **************************/
 int iPCF857XAdr = 0x20;
 bool TestLed = false;
+//TODO remove
+int iLedNr = 1;
 bool bKeyPressed = false;
-PCF8575 pcf857X(iPCF857XAdr);
+PCF8574 pcf857X(iPCF857XAdr);
 
 /***************************
  * otherSettings
@@ -198,11 +200,7 @@ void setup(void)
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
-  /* PCF8575 */
-  //set port 0 as output ad port 1 as input TODO adjust
-  pcf857X.pinMode(P0, OUTPUT);
-  pcf857X.pinMode(P1, INPUT);
-  pcf857X.pinMode(P2, INPUT);
+
 
   /* LCD */
   lcd.init(); // initialize the lcd
@@ -256,6 +254,23 @@ void setup(void)
 
   //initialize pcf8574
   pcf857X.begin();
+  pcf857X.pinMode(P0, INPUT);
+  pcf857X.pinMode(P1, INPUT);
+  pcf857X.pinMode(P2, INPUT);
+  pcf857X.pinMode(P3, INPUT);
+  pcf857X.pinMode(P4, OUTPUT);
+  pcf857X.pinMode(P5, OUTPUT);
+  pcf857X.pinMode(P6, OUTPUT);
+  pcf857X.pinMode(P7, OUTPUT);
+
+  pcf857X.digitalWrite(P0, HIGH);
+  pcf857X.digitalWrite(P1, HIGH);
+  pcf857X.digitalWrite(P2, HIGH);
+  pcf857X.digitalWrite(P3, HIGH);
+  pcf857X.digitalWrite(P4, LOW);
+  pcf857X.digitalWrite(P5, LOW);
+  pcf857X.digitalWrite(P6, LOW);
+  pcf857X.digitalWrite(P7, LOW);
 
   //initialize temp sensors
   sensoren.begin();
@@ -320,6 +335,37 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
+    //TODO remove Test LED
+  pcf857X.digitalWrite(P4, LOW);
+  pcf857X.digitalWrite(P5, LOW);
+  pcf857X.digitalWrite(P6, LOW);
+  pcf857X.digitalWrite(P7, LOW);
+  switch (iLedNr)
+  {
+  case 1:
+  pcf857X.digitalWrite(P4, HIGH);
+    /* code */
+    break;
+      case 2:
+  pcf857X.digitalWrite(P5, HIGH);
+    /* code */
+    break;
+      case 3:
+  pcf857X.digitalWrite(P6, HIGH);
+    /* code */
+    break;
+      case 4:
+  pcf857X.digitalWrite(P7, HIGH);
+    /* code */
+    break;
+  
+  default:
+    break;
+  }
+  iLedNr++;
+  if(iLedNr == 5) iLedNr = 1;
+
+ 
 
     if (WiFi.status() not_eq WL_CONNECTED)
     {
@@ -501,19 +547,22 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-/*TODO disabled Key for new Ctrl PCB
-    uint8_t val = pcf857X.digitalRead(P1);
+   
+    uint8_t val = pcf857X.digitalRead(P0);
+   //pcf857X.digitalWrite(P0, val);
+   /*
     if (val == HIGH)
       bKeyPressed = true;
     else
     */
-      bKeyPressed = false;
+    bKeyPressed = false;
     if (bKeyPressed)
     {
       iManMode++;
       if (iManMode == 7)
         iManMode = 0;
     }
+    
 
     //manual pos override
     if (iManMode < 6)
