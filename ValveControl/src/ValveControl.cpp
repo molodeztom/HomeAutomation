@@ -35,7 +35,8 @@ Home Automation Project
   20210829  V0.19: c Lightsensor back to code
   20210830  V0.20: c Timing back to original values (due to mqtt connect errors), Valve ON display bug corrected
   20210830  V0.21: + ErrorNumber to reset errors specifically
-  20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LED 1
+  20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LEDs with running light
+  20211127  V0.23: c Switch LED 1 according to switch 1
  
 
   
@@ -59,7 +60,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V0.22";
+const String sSoftware = "ValveCtrl V0.23";
 
 /***************************
  * LCD Settings
@@ -200,8 +201,6 @@ void setup(void)
 
   Wire.begin(SDA_PIN, SCL_PIN);
 
-
-
   /* LCD */
   lcd.init(); // initialize the lcd
   lcd.backlight();
@@ -262,15 +261,16 @@ void setup(void)
   pcf857X.pinMode(P5, OUTPUT);
   pcf857X.pinMode(P6, OUTPUT);
   pcf857X.pinMode(P7, OUTPUT);
-
+  /*
   pcf857X.digitalWrite(P0, HIGH);
   pcf857X.digitalWrite(P1, HIGH);
   pcf857X.digitalWrite(P2, HIGH);
   pcf857X.digitalWrite(P3, HIGH);
-  pcf857X.digitalWrite(P4, LOW);
-  pcf857X.digitalWrite(P5, LOW);
-  pcf857X.digitalWrite(P6, LOW);
-  pcf857X.digitalWrite(P7, LOW);
+  */
+  pcf857X.digitalWrite(P4, HIGH);
+  pcf857X.digitalWrite(P5, HIGH);
+  pcf857X.digitalWrite(P6, HIGH);
+  pcf857X.digitalWrite(P7, HIGH);
 
   //initialize temp sensors
   sensoren.begin();
@@ -335,6 +335,7 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
+    /*
     //TODO remove Test LED
   pcf857X.digitalWrite(P4, LOW);
   pcf857X.digitalWrite(P5, LOW);
@@ -344,19 +345,19 @@ void loop(void)
   {
   case 1:
   pcf857X.digitalWrite(P4, HIGH);
-    /* code */
+  
     break;
       case 2:
   pcf857X.digitalWrite(P5, HIGH);
-    /* code */
+ 
     break;
       case 3:
   pcf857X.digitalWrite(P6, HIGH);
-    /* code */
+  
     break;
       case 4:
   pcf857X.digitalWrite(P7, HIGH);
-    /* code */
+
     break;
   
   default:
@@ -364,8 +365,7 @@ void loop(void)
   }
   iLedNr++;
   if(iLedNr == 5) iLedNr = 1;
-
- 
+*/
 
     if (WiFi.status() not_eq WL_CONNECTED)
     {
@@ -547,22 +547,44 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-   
     uint8_t val = pcf857X.digitalRead(P0);
-   //pcf857X.digitalWrite(P0, val);
-   /*
+    uint8_t val1 = pcf857X.digitalRead(P1);
+    uint8_t val2 = pcf857X.digitalRead(P2);
+    uint8_t val3 = pcf857X.digitalRead(P3);
     if (val == HIGH)
-      bKeyPressed = true;
+      pcf857X.digitalWrite(P4, LOW);
     else
-    */
-    bKeyPressed = false;
+      pcf857X.digitalWrite(P4, HIGH);
+
+    if (val1 == HIGH)
+      pcf857X.digitalWrite(P5, LOW);
+    else
+      pcf857X.digitalWrite(P5, HIGH);
+
+    if (val2 == HIGH)
+      pcf857X.digitalWrite(P6, LOW);
+    else
+      pcf857X.digitalWrite(P6, HIGH);
+    if (val3 == HIGH)
+      pcf857X.digitalWrite(P7, LOW);
+    else
+      pcf857X.digitalWrite(P7, HIGH);
+
+    if (val == HIGH)
+    {
+      bKeyPressed = true;
+    }
+    else
+    {
+      bKeyPressed = false;
+    }
+
     if (bKeyPressed)
     {
       iManMode++;
       if (iManMode == 7)
         iManMode = 0;
     }
-    
 
     //manual pos override
     if (iManMode < 6)
@@ -580,7 +602,7 @@ void loop(void)
     updateLCD();
 
     //Measure light and switch on backlight if bright
-
+    /*TODO reactivate
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -588,6 +610,8 @@ void loop(void)
     }
     else
       lcd.backlight();
+      */
+    lcd.backlight();
 
     iValveIntervalCnt++; //count interval seconds
 
