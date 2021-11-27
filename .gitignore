@@ -6,3 +6,13 @@
 /build
 *.bak
 *.pdf
+ValveControl/EasyEDA/Gerber_PCB_HeaterFlowRegulatorControlPCB/How-to-order-PCB.txt
+ValveControl/EasyEDA/Gerber_PCB_HeaterFlowRegulatorControlPCB.zip
+ValveControl/EasyEDA/OBJ_PCB_HeaterFlowRegulatorControlPCB_2021-11-01/OBJ_PCB_HeaterFlowRegulatorControlPCB.mtl
+ValveControl/EasyEDA/OBJ_PCB_HeaterFlowRegulatorControlPCB_2021-11-01.zip
+ValveControl/EasyEDA/PCB_HeaterFlowRegulator_2021-11-06.dxf
+ValveControl/EasyEDA/PCB_HeaterFlowRegulatorControlPCB_2021-11-01.dxf
+ValveControl/EasyEDA/PCB_PCB_HeaterFlowRegulator_2021-11-06.svg
+ValveControl/EasyEDA/PCB_PCB_HeaterFlowRegulator_2021-11-06.zip
+ValveControl/EasyEDA/PCB_PCB_HeaterFlowRegulatorControlPCB_2021-11-01.svg
+.gitignore
