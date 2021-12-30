@@ -38,6 +38,7 @@ Home Automation Project
   20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LEDs with running light
   20211127  V0.23: c Switch LED 1 according to switch 1
   2021230   V0.24: c LED with defines, LED with function
+  20211340  V0.25: c LED according to function
  
 
   
@@ -61,7 +62,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V0.23";
+const String sSoftware = "ValveCtrl V0.25";
 
 /***************************
  * LCD Settings
@@ -84,7 +85,7 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 char
 OneWire oneWire(ONE_WIRE_PIN);
 DallasTemperature sensoren(&oneWire);
 //Array to store temp sensor adresses
-DeviceAddress TempSensAdress; 
+DeviceAddress TempSensAdress;
 //Datenstruktur f�r den Datenaustausch
 #define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gel�tet 5 = Valve Control
 
@@ -95,8 +96,6 @@ DeviceAddress TempSensAdress;
 #define LEDGN P5
 #define LEDBL P6
 #define LEDRT P7
-
-
 
 byte gradeChar[8] = {
     0b00111,
@@ -200,7 +199,7 @@ int iErrNumber = 0; //helper to reset an error, is set to error if condition of 
 void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
-void updateLCD();
+void updateLCDandLED();
 void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 
@@ -273,17 +272,18 @@ void setup(void)
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
   pcf857X.pinMode(LEDBL, OUTPUT);
- 
-  pcf857X.digitalWrite(LEDRT, LOW);
+  
+  //LED Test
   ledOn(LEDRT);
-  pcf857X.digitalWrite(LEDGN, LOW);
-  pcf857X.digitalWrite(LEDGB, LOW);
-  pcf857X.digitalWrite(LEDBL, LOW);
+  ledOn(LEDGN);
+  ledOn(LEDGB);
+  ledOn(LEDBL);
   delay(1000);
- ledOff(LEDRT);
-  pcf857X.digitalWrite(LEDGN, HIGH);
-  pcf857X.digitalWrite(LEDGB, HIGH);
-  pcf857X.digitalWrite(LEDBL, HIGH);
+  ledOff(LEDRT);
+  ledOff(LEDGN);
+  ledOff(LEDGB);
+  ledOff(LEDBL);
+  
 
   //initialize temp sensors
   sensoren.begin();
@@ -320,7 +320,7 @@ void setup(void)
 #endif
 
 #ifdef DEBUG
-  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) 
+  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit)
   sensoren.setResolution(adressen, 12);
   Serial.print("Aufl�sung = ");
   Serial.print(sensoren.getResolution(adressen), DEC);
@@ -348,51 +348,7 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
-    //TODO remove Test LED
-    if(LedOn == false){
-      pcf857X.digitalWrite(LEDBL, LOW);
-      LedOn = true;
-    }
-    else
-    {
-           pcf857X.digitalWrite(LEDBL, HIGH);
-           LedOn = false;
-    }
-    
-  
-
-
-/*
-    switch (iLedNr)
-    {
-    case 1:
-      pcf857X.digitalWrite(LEDRT, LOW);
-      pcf857X.digitalWrite(LEDGB, HIGH);
-
-      break;
-    case 2:
-      pcf857X.digitalWrite(LEDGN, LOW);
-      pcf857X.digitalWrite(LEDBL, HIGH);
-
-      break;
-    case 3:
-      pcf857X.digitalWrite(LEDGB, LOW);
-      pcf857X.digitalWrite(LEDRT, HIGH);
-
-      break;
-    case 4:
-      pcf857X.digitalWrite(LEDBL, LOW);
-      pcf857X.digitalWrite(LEDGN, HIGH);
-
-      break;
-
-    default:
-      break;
-    }
-    iLedNr++;
-    if (iLedNr == 5)
-      iLedNr = 1;
-      */
+ 
 
     if (WiFi.status() not_eq WL_CONNECTED)
     {
@@ -443,6 +399,7 @@ void loop(void)
     if (iValvPosSetP == 1)
     {
       //on position 1 we use interval on/off
+      ledOn(LEDGB);
       if (iValveIntervalCnt >= iValvInterval1)
       {
         Serial.println("Int1 triggered");
@@ -465,6 +422,7 @@ void loop(void)
     if (iValvPosSetP == 2)
     {
       //on position 2 we use interval on/off
+       ledOn(LEDGB);
       if (iValveIntervalCnt >= iValvInterval2)
       {
         Serial.println("Int2 triggered");
@@ -485,6 +443,7 @@ void loop(void)
     }
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
+       ledOff(LEDGB);
       iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
       if (iValvPosSetP == 0)
         bValveOn = false;
@@ -492,7 +451,7 @@ void loop(void)
         bValveOn = true; //on higher levels valve always on according to set value
     }
 
-    //Convert position 0-5 to voltage 0-4095
+    //Convert position 0-5 to voltage 0-4095 0 means fully closed 5 means fully open
     iValvVolt = map(iActValvPos, 0, 5, 0, 4095);
 #ifdef DEBUG
     Serial.println("Set Valve to: ");
@@ -629,10 +588,10 @@ void loop(void)
       iValvPosSetP = iAutoValue;
     }
 
-    updateLCD();
+    updateLCDandLED();
 
     //Measure light and switch on backlight if bright
-    
+
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -640,7 +599,7 @@ void loop(void)
     }
     else
       lcd.backlight();
-      
+
     lcd.backlight();
 
     iValveIntervalCnt++; //count interval seconds
@@ -694,7 +653,7 @@ void callback(char *topic, byte *data, unsigned int dataLength)
   }
 }
 
-void updateLCD()
+void updateLCDandLED()
 {
   // Write display we have 2 columns with each 16 characters
   char valueStr[20]; //helper for conversion
@@ -717,6 +676,7 @@ void updateLCD()
   {
     lcd.setCursor(0, 1);
     lcd.print(sErrorText);
+    ledOn(LEDRT);
     bErrorDisp = false; //display error alternately
   }
   else
@@ -724,16 +684,24 @@ void updateLCD()
     lcd.setCursor(0, 1);
     lcd.print("Vent:");
     lcd.print(iValvPosSetP);
+    ledOff(LEDRT);
     //display man / auto mode
     if (iManMode < 6)
       lcd.print(" Man");
     else
       lcd.print(" Aut");
     //display on/off
-    if (bValveOn == true)
-      lcd.print(" Auf");
+    if (bValveOn == true){
+          lcd.print(" Auf");
+          ledOn(LEDGN);
+    }
+ 
     else
-      lcd.print(" Zu ");
+    {
+         lcd.print(" Zu ");
+         ledOff(LEDGN);
+    }
+     
 
     bErrorDisp = true; //display error alternately
   }
@@ -810,11 +778,13 @@ void mQTTConnect()
   }
 }
 // function LED on off
-void ledOn(uint8_t LedNr){
- pcf857X.digitalWrite(LedNr, LOW);
+void ledOn(uint8_t LedNr)
+{
+  pcf857X.digitalWrite(LedNr, LOW);
 }
-void ledOff(uint8_t LedNr){
- pcf857X.digitalWrite(LedNr, HIGH);
+void ledOff(uint8_t LedNr)
+{
+  pcf857X.digitalWrite(LedNr, HIGH);
 }
 
 // function um eine Sensoradresse zu drucken
