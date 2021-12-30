@@ -37,11 +37,10 @@ Home Automation Project
   20210830  V0.21: + ErrorNumber to reset errors specifically
   20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LEDs with running light
   20211127  V0.23: c Switch LED 1 according to switch 1
-  2021230   V0.24: c LED with defines, LED with function
-  20211340  V0.25: c LED according to function
- 
-
-  
+  20211230  V0.24: c LED with defines, LED with function
+  20211230  V0.25: c LED according to function
+  20211230  V0.26: c Switches according to function
+   
 
 **************************************************************************/
 
@@ -62,7 +61,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V0.25";
+const String sSoftware = "ValveCtrl V0.26";
 
 /***************************
  * LCD Settings
@@ -96,6 +95,10 @@ DeviceAddress TempSensAdress;
 #define LEDGN P5
 #define LEDBL P6
 #define LEDRT P7
+#define SWGB P0
+#define SWGN P1
+#define SWBL P2
+#define SWRT P3
 
 byte gradeChar[8] = {
     0b00111,
@@ -151,7 +154,7 @@ const unsigned long ulMQTTInterval = 3 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
 const unsigned long ulValveSetInterval = 10 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
-const unsigned long ulUpdateLCDInterval = 1 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
+const unsigned long ulUpdateLCDInterval = 0.3 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
 int iValvInterval2 = 6 * 60;             //interval valve value 2 6 minutes on/off, can be changed per mqtt remotely
 int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
@@ -171,7 +174,7 @@ int iMCPMaxCode = 4096; //code for max output
 int iGY302Adr = 0x23;
 BH1750 lightSensor;
 float fLux = -127;
-#define MIN_BACKLIGHT_LUX 50
+#define MIN_BACKLIGHT_LUX 10
 
 /***************************
  * PCF857XC I2C to parallel 
@@ -264,10 +267,10 @@ void setup(void)
 
   //initialize pcf8574
   pcf857X.begin();
-  pcf857X.pinMode(P0, INPUT);
-  pcf857X.pinMode(P1, INPUT);
-  pcf857X.pinMode(P2, INPUT);
-  pcf857X.pinMode(P3, INPUT);
+  pcf857X.pinMode(SWGB, INPUT);
+  pcf857X.pinMode(SWGN, INPUT);
+  pcf857X.pinMode(SWRT, INPUT);
+  pcf857X.pinMode(SWBL, INPUT);
   pcf857X.pinMode(LEDRT, OUTPUT);
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
@@ -533,48 +536,27 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-    uint8_t val = pcf857X.digitalRead(P0);
-    uint8_t val1 = pcf857X.digitalRead(P1);
-    uint8_t val2 = pcf857X.digitalRead(P2);
-    uint8_t val3 = pcf857X.digitalRead(P3);
-    //TODO remove switch on LED according to switch
-    /*
-    if (val == HIGH)
-      pcf857X.digitalWrite(LEDRT, LOW);
-    else
-      pcf857X.digitalWrite(LEDRT, HIGH);
+   
 
-    if (val1 == HIGH)
-      pcf857X.digitalWrite(LEDGN, LOW);
-    else
-      pcf857X.digitalWrite(LEDGN, HIGH);
-
-    if (val2 == HIGH)
-      pcf857X.digitalWrite(LEDGB, LOW);
-    else
-      pcf857X.digitalWrite(LEDGB, HIGH);
-    if (val3 == HIGH)
-      pcf857X.digitalWrite(LEDBL, LOW);
-    else
-      pcf857X.digitalWrite(LEDBL, HIGH);
-      */
-
-    if (val == HIGH)
+    if ((pcf857X.digitalRead(SWGB)) == HIGH)
     {
-      bKeyPressed = true;
+      //set to Auto
+      iManMode = 6;
     }
-    else
+    if ((pcf857X.digitalRead(SWBL)) == HIGH)
     {
-      bKeyPressed = false;
-    }
-
-    if (bKeyPressed)
-    {
+      //manual value up 6 is max 
       iManMode++;
-      if (iManMode == 7)
-        iManMode = 0;
+      if (iManMode > 5)
+        iManMode = 5;
     }
-
+      if ((pcf857X.digitalRead(SWGN)) == HIGH)
+    {
+      //manual value up 0 is min 
+        if (iManMode> 0)
+         iManMode--;
+    }
+   
     //manual pos override
     if (iManMode < 6)
     {
@@ -600,7 +582,7 @@ void loop(void)
     else
       lcd.backlight();
 
-    lcd.backlight();
+    //lcd.backlight();
 
     iValveIntervalCnt++; //count interval seconds
 
