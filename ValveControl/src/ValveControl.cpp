@@ -37,6 +37,7 @@ Home Automation Project
   20210830  V0.21: + ErrorNumber to reset errors specifically
   20211127  V0.22: c Adapt to Ctrl PCB disable Switch and test LEDs with running light
   20211127  V0.23: c Switch LED 1 according to switch 1
+  2021230   V0.24: c LED with defines, LED with function
  
 
   
@@ -83,9 +84,19 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 char
 OneWire oneWire(ONE_WIRE_PIN);
 DallasTemperature sensoren(&oneWire);
 //Array to store temp sensor adresses
-DeviceAddress adressen; //TODO rename
+DeviceAddress TempSensAdress; 
 //Datenstruktur f�r den Datenaustausch
 #define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gel�tet 5 = Valve Control
+
+/***************************
+ * Ctrl PCB Settings
+ **************************/
+#define LEDGB P4
+#define LEDGN P5
+#define LEDBL P6
+#define LEDRT P7
+
+
 
 byte gradeChar[8] = {
     0b00111,
@@ -164,13 +175,13 @@ float fLux = -127;
 #define MIN_BACKLIGHT_LUX 50
 
 /***************************
- * PCF857XC I2C to parallel if
- * TODO: change to PCF8574 
+ * PCF857XC I2C to parallel 
  **************************/
 int iPCF857XAdr = 0x20;
 bool TestLed = false;
 //TODO remove
 int iLedNr = 1;
+bool LedOn = false;
 bool bKeyPressed = false;
 PCF8574 pcf857X(iPCF857XAdr);
 
@@ -190,6 +201,8 @@ void printAddress(DeviceAddress adressen);
 void wifiConnectStation();
 void mQTTConnect();
 void updateLCD();
+void ledOn(uint8_t LedNr);
+void ledOff(uint8_t LedNr);
 
 void setup(void)
 {
@@ -225,7 +238,6 @@ void setup(void)
   iValveIntervalCnt = 0;
   bValveOn = true;
   //Light Sensor use high res mode and default adress
-  //TODO reactivate when light Sensor is connected
   lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, iGY302Adr);
   lightSensor.setMTreg(220); //more resolution
 
@@ -257,26 +269,27 @@ void setup(void)
   pcf857X.pinMode(P1, INPUT);
   pcf857X.pinMode(P2, INPUT);
   pcf857X.pinMode(P3, INPUT);
-  pcf857X.pinMode(P4, OUTPUT);
-  pcf857X.pinMode(P5, OUTPUT);
-  pcf857X.pinMode(P6, OUTPUT);
-  pcf857X.pinMode(P7, OUTPUT);
-  /*
-  pcf857X.digitalWrite(P0, HIGH);
-  pcf857X.digitalWrite(P1, HIGH);
-  pcf857X.digitalWrite(P2, HIGH);
-  pcf857X.digitalWrite(P3, HIGH);
-  */
-  pcf857X.digitalWrite(P4, HIGH);
-  pcf857X.digitalWrite(P5, HIGH);
-  pcf857X.digitalWrite(P6, HIGH);
-  pcf857X.digitalWrite(P7, HIGH);
+  pcf857X.pinMode(LEDRT, OUTPUT);
+  pcf857X.pinMode(LEDGN, OUTPUT);
+  pcf857X.pinMode(LEDGB, OUTPUT);
+  pcf857X.pinMode(LEDBL, OUTPUT);
+ 
+  pcf857X.digitalWrite(LEDRT, LOW);
+  ledOn(LEDRT);
+  pcf857X.digitalWrite(LEDGN, LOW);
+  pcf857X.digitalWrite(LEDGB, LOW);
+  pcf857X.digitalWrite(LEDBL, LOW);
+  delay(1000);
+ ledOff(LEDRT);
+  pcf857X.digitalWrite(LEDGN, HIGH);
+  pcf857X.digitalWrite(LEDGB, HIGH);
+  pcf857X.digitalWrite(LEDBL, HIGH);
 
   //initialize temp sensors
   sensoren.begin();
 
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
-  if (!sensoren.getAddress(adressen, 0))
+  if (!sensoren.getAddress(TempSensAdress, 0))
   {
     Serial.println("2: Kein Temperatursensor vorhanden!");
     bError = true;
@@ -291,7 +304,7 @@ void setup(void)
 #endif
 
   //2. Sensor
-  if (!sensoren.getAddress(adressen, 1))
+  if (!sensoren.getAddress(TempSensAdress, 1))
   {
     Serial.println("3: Kein Temperatursensor vorhanden!");
     bError = true;
@@ -307,7 +320,7 @@ void setup(void)
 #endif
 
 #ifdef DEBUG
-  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) TODO das ist nur f�r den ersten Sensor oder?
+  //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) 
   sensoren.setResolution(adressen, 12);
   Serial.print("Aufl�sung = ");
   Serial.print(sensoren.getResolution(adressen), DEC);
@@ -335,37 +348,51 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
-    /*
     //TODO remove Test LED
-  pcf857X.digitalWrite(P4, LOW);
-  pcf857X.digitalWrite(P5, LOW);
-  pcf857X.digitalWrite(P6, LOW);
-  pcf857X.digitalWrite(P7, LOW);
-  switch (iLedNr)
-  {
-  case 1:
-  pcf857X.digitalWrite(P4, HIGH);
+    if(LedOn == false){
+      pcf857X.digitalWrite(LEDBL, LOW);
+      LedOn = true;
+    }
+    else
+    {
+           pcf857X.digitalWrite(LEDBL, HIGH);
+           LedOn = false;
+    }
+    
   
-    break;
-      case 2:
-  pcf857X.digitalWrite(P5, HIGH);
- 
-    break;
-      case 3:
-  pcf857X.digitalWrite(P6, HIGH);
-  
-    break;
-      case 4:
-  pcf857X.digitalWrite(P7, HIGH);
 
-    break;
-  
-  default:
-    break;
-  }
-  iLedNr++;
-  if(iLedNr == 5) iLedNr = 1;
-*/
+
+/*
+    switch (iLedNr)
+    {
+    case 1:
+      pcf857X.digitalWrite(LEDRT, LOW);
+      pcf857X.digitalWrite(LEDGB, HIGH);
+
+      break;
+    case 2:
+      pcf857X.digitalWrite(LEDGN, LOW);
+      pcf857X.digitalWrite(LEDBL, HIGH);
+
+      break;
+    case 3:
+      pcf857X.digitalWrite(LEDGB, LOW);
+      pcf857X.digitalWrite(LEDRT, HIGH);
+
+      break;
+    case 4:
+      pcf857X.digitalWrite(LEDBL, LOW);
+      pcf857X.digitalWrite(LEDGN, HIGH);
+
+      break;
+
+    default:
+      break;
+    }
+    iLedNr++;
+    if (iLedNr == 5)
+      iLedNr = 1;
+      */
 
     if (WiFi.status() not_eq WL_CONNECTED)
     {
@@ -551,24 +578,27 @@ void loop(void)
     uint8_t val1 = pcf857X.digitalRead(P1);
     uint8_t val2 = pcf857X.digitalRead(P2);
     uint8_t val3 = pcf857X.digitalRead(P3);
+    //TODO remove switch on LED according to switch
+    /*
     if (val == HIGH)
-      pcf857X.digitalWrite(P4, LOW);
+      pcf857X.digitalWrite(LEDRT, LOW);
     else
-      pcf857X.digitalWrite(P4, HIGH);
+      pcf857X.digitalWrite(LEDRT, HIGH);
 
     if (val1 == HIGH)
-      pcf857X.digitalWrite(P5, LOW);
+      pcf857X.digitalWrite(LEDGN, LOW);
     else
-      pcf857X.digitalWrite(P5, HIGH);
+      pcf857X.digitalWrite(LEDGN, HIGH);
 
     if (val2 == HIGH)
-      pcf857X.digitalWrite(P6, LOW);
+      pcf857X.digitalWrite(LEDGB, LOW);
     else
-      pcf857X.digitalWrite(P6, HIGH);
+      pcf857X.digitalWrite(LEDGB, HIGH);
     if (val3 == HIGH)
-      pcf857X.digitalWrite(P7, LOW);
+      pcf857X.digitalWrite(LEDBL, LOW);
     else
-      pcf857X.digitalWrite(P7, HIGH);
+      pcf857X.digitalWrite(LEDBL, HIGH);
+      */
 
     if (val == HIGH)
     {
@@ -602,7 +632,7 @@ void loop(void)
     updateLCD();
 
     //Measure light and switch on backlight if bright
-    /*TODO reactivate
+    
     fLux = lightSensor.readLightLevel();
     if (fLux < MIN_BACKLIGHT_LUX)
     {
@@ -610,7 +640,7 @@ void loop(void)
     }
     else
       lcd.backlight();
-      */
+      
     lcd.backlight();
 
     iValveIntervalCnt++; //count interval seconds
@@ -778,6 +808,13 @@ void mQTTConnect()
       sErrorText = "4 MQTTFailure   ";
     }
   }
+}
+// function LED on off
+void ledOn(uint8_t LedNr){
+ pcf857X.digitalWrite(LedNr, LOW);
+}
+void ledOff(uint8_t LedNr){
+ pcf857X.digitalWrite(LedNr, HIGH);
 }
 
 // function um eine Sensoradresse zu drucken
