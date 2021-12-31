@@ -40,6 +40,8 @@ Home Automation Project
   20211230  V0.24: c LED with defines, LED with function
   20211230  V0.25: c LED according to function
   20211230  V0.26: c Switches according to function
+  20211231  V0.27: c Light sensor less 
+  20211231  V1.00: i Released and working fixed on wall
    
 
 **************************************************************************/
@@ -61,7 +63,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V0.26";
+const String sSoftware = "ValveCtrl V1.00";
 
 /***************************
  * LCD Settings
@@ -174,7 +176,7 @@ int iMCPMaxCode = 4096; //code for max output
 int iGY302Adr = 0x23;
 BH1750 lightSensor;
 float fLux = -127;
-#define MIN_BACKLIGHT_LUX 10
+#define MIN_BACKLIGHT_LUX 1
 
 /***************************
  * PCF857XC I2C to parallel 
