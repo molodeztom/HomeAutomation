@@ -41,7 +41,7 @@ Home Automation Project
   20211230  V0.25: c LED according to function
   20211230  V0.26: c Switches according to function
   20211231  V0.27: c Light sensor less 
-  20211231  V1.00: i Released and working fixed on wall
+  20211231  V1.00: i Released and working fixed on wall, MQTT Man Auto Mode published, start with Auto Mode
    
 
 **************************************************************************/
@@ -142,7 +142,7 @@ DATEN_STRUKTUR data;
 const int mqttRecBufSiz = 50;
 char mqttBufValvPos[mqttRecBufSiz];
 int iValvPosSetP;          //Setpoint Valve Position
-int iManMode = 3;          //6 = auto, 0-5 manual valve setting
+int iManMode = 6;          //6 = auto, 0-5 manual valve setting
 int iAutoValue = 5;        //value for valve from MQTT keeps always last updated value
 int iValveIntervalCnt = 0; //Counter valve interval in seconds
 bool bValveOn = true;      //Valve on/off used for interval
@@ -514,6 +514,12 @@ void loop(void)
     mqttClient.publish(T_CHANNEL "/TempOut", valueStr);
     dtostrf(fLux, 1, 0, valueStr);
     mqttClient.publish(T_CHANNEL "/Light", valueStr);
+    //display man / auto mode
+    if (iManMode < 6)
+       mqttClient.publish(T_CHANNEL "/ManAuto", "MAN");
+    else
+       mqttClient.publish(T_CHANNEL "/ManAuto", "AUTO");
+    //display on/off
 
     if (bError == true)
     {
