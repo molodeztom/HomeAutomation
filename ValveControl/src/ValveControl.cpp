@@ -42,6 +42,8 @@ Home Automation Project
   20211230  V0.26: c Switches according to function
   20211231  V0.27: c Light sensor less 
   20211231  V1.00: i Released and working fixed on wall, MQTT Man Auto Mode published, start with Auto Mode
+  20220101  V1.01: c On interval mode open to pos 3 instead of 5, mode1 off time greater than on time
+  20220102  V1.02: b Mode1 changed interval handling, off time double on time, fixed boolean operations bug
    
 
 **************************************************************************/
@@ -63,7 +65,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V1.00";
+const String sSoftware = "ValveCtrl V1.02";
 
 /***************************
  * LCD Settings
@@ -85,7 +87,7 @@ LiquidCrystal_I2C lcd(0x27, 20, 4); // set the LCD address to 0x27 for a 16 char
 #define SENSCORR1A -0.3 //calibration
 OneWire oneWire(ONE_WIRE_PIN);
 DallasTemperature sensoren(&oneWire);
-//Array to store temp sensor adresses
+//Array to store temp sensor adress
 DeviceAddress TempSensAdress;
 //Datenstruktur f�r den Datenaustausch
 #define CHAN 5 // device channel 1 = Developmentboard 2 = ESP gel�tet 5 = Valve Control
@@ -154,11 +156,11 @@ int iActValvPos = 5;       //Valve position actually set
 
 const unsigned long ulMQTTInterval = 3 * 1000UL; //call MQTT server
 long lMQTTTime = 0;
-const unsigned long ulValveSetInterval = 10 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
+const unsigned long ulValveSetInterval = 60 * 1000UL; //Normal 60 set valve, measure temp, send mqtt  60 sec
 long lValveSetTime = 0;
 const unsigned long ulUpdateLCDInterval = 0.3 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
-int iValvInterval2 = 6 * 60;             //interval valve value 2 6 minutes on/off, can be changed per mqtt remotely
+int iValvInterval2 = 4 ;            //interval valve value in minutes (depending on ulValveSetInterval set to 60) 5 minutes on, can be changed per mqtt remotely
 int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
 
 /***************************
@@ -277,7 +279,7 @@ void setup(void)
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
   pcf857X.pinMode(LEDBL, OUTPUT);
-  
+
   //LED Test
   ledOn(LEDRT);
   ledOn(LEDGN);
@@ -288,7 +290,6 @@ void setup(void)
   ledOff(LEDGN);
   ledOff(LEDGB);
   ledOff(LEDBL);
-  
 
   //initialize temp sensors
   sensoren.begin();
@@ -343,7 +344,7 @@ void setup(void)
 
   Serial.println("Setup done");
   delay(1000);
-  lValveSetTime = ulValveSetInterval - 100; //trigger event sooner
+  lValveSetTime = ulValveSetInterval - 100; //trigger first event sooner
 }
 
 void loop(void)
@@ -353,7 +354,8 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
- 
+        //OTA Functions
+    ArduinoOTA.handle();
 
     if (WiFi.status() not_eq WL_CONNECTED)
     {
@@ -396,6 +398,8 @@ void loop(void)
   {
     int iValvVolt;
     bool bDACStatus = false;
+        //OTA Functions
+    ArduinoOTA.handle();
 
     //on Error open valve to full
     if (bError == true)
@@ -403,52 +407,57 @@ void loop(void)
 
     if (iValvPosSetP == 1)
     {
-      //on position 1 we use interval on/off
+      //on position 1 we use interval on/off interval 1 is longer then interval 2
       ledOn(LEDGB);
-      if (iValveIntervalCnt >= iValvInterval1)
+      if ((bValveOn == true) & (iValveIntervalCnt >= iValvInterval2))
       {
-        Serial.println("Int1 triggered");
+        //On time uses shorter interval
+        bValveOn = false; //toggle valve
+        iActValvPos = 0;  //valve off
+        //Serial.println("Int1 OFF");
+        //Serial.println("Pos 1 Int2 triggered");
         iValveIntervalCnt = 0;
-        if (bValveOn == true)
-        {
-          bValveOn = false; //toggle valve
-          iActValvPos = 0;  //valve off
-          Serial.println("Int1 OFF");
-        }
-        else
-        {
-          bValveOn = true; //toggle valve
-          iActValvPos = 5; //valve full open
-          Serial.println("Int1 ON");
-        }
+      }
+
+      else if ((bValveOn == false) & (iValveIntervalCnt >= iValvInterval1))
+      {
+        //off time uses longer interval
+        bValveOn = true; //toggle valve
+        iActValvPos = 3; //valve little bit open
+        //Serial.println("Int1 ON");
+        //iValveIntervalCnt = 0;
       }
     }
+        //OTA Functions
+    ArduinoOTA.handle();
 
     if (iValvPosSetP == 2)
     {
       //on position 2 we use interval on/off
-       ledOn(LEDGB);
+      ledOn(LEDGB);
       if (iValveIntervalCnt >= iValvInterval2)
       {
-        Serial.println("Int2 triggered");
+       // Serial.println("Int2 triggered");
         iValveIntervalCnt = 0;
         if (bValveOn == true)
         {
           bValveOn = false; //toggle valve
           iActValvPos = 0;  //valve off
-          Serial.println("Int2 OFF");
+         // Serial.println("Int2 OFF");
         }
         else
         {
           bValveOn = true; //toggle valve
-          iActValvPos = 5; //valve full open
-          Serial.println("Int2 ON");
+          iActValvPos = 3; //valve little bit open
+         // Serial.println("Int2 ON");
         }
       }
     }
+        //OTA Functions
+    ArduinoOTA.handle();
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
-       ledOff(LEDGB);
+      ledOff(LEDGB);
       iActValvPos = iValvPosSetP; //valve position actually set, when 3-5 use value directly
       if (iValvPosSetP == 0)
         bValveOn = false;
@@ -480,6 +489,8 @@ void loop(void)
         iErrNumber = 0;
       }
     }
+        //OTA Functions
+    ArduinoOTA.handle();
 
     data.temp1 = 0;
     data.temp2 = 0;
@@ -501,6 +512,8 @@ void loop(void)
     Serial.print("Light: ");
     Serial.println(fLux);
 #endif
+    //OTA Functions
+    ArduinoOTA.handle();
 
     //Publish values over MQTT
     char valueStr[20]; //helper for conversion
@@ -516,9 +529,9 @@ void loop(void)
     mqttClient.publish(T_CHANNEL "/Light", valueStr);
     //display man / auto mode
     if (iManMode < 6)
-       mqttClient.publish(T_CHANNEL "/ManAuto", "MAN");
+      mqttClient.publish(T_CHANNEL "/ManAuto", "MAN");
     else
-       mqttClient.publish(T_CHANNEL "/ManAuto", "AUTO");
+      mqttClient.publish(T_CHANNEL "/ManAuto", "AUTO");
     //display on/off
 
     if (bError == true)
@@ -533,7 +546,7 @@ void loop(void)
     {
       iCount = 0;
     }
-
+    iValveIntervalCnt++; //count interval seconds
     lValveSetTime = millis();
   }
 
@@ -544,7 +557,6 @@ void loop(void)
     ArduinoOTA.handle();
 
     //read manual switch each press sets a number from 0 to 6. 6 = auto, 0-5 man valve position
-   
 
     if ((pcf857X.digitalRead(SWGB)) == HIGH)
     {
@@ -553,18 +565,18 @@ void loop(void)
     }
     if ((pcf857X.digitalRead(SWBL)) == HIGH)
     {
-      //manual value up 6 is max 
+      //manual value up 6 is max
       iManMode++;
       if (iManMode > 5)
         iManMode = 5;
     }
-      if ((pcf857X.digitalRead(SWGN)) == HIGH)
+    if ((pcf857X.digitalRead(SWGN)) == HIGH)
     {
-      //manual value up 0 is min 
-        if (iManMode> 0)
-         iManMode--;
+      //manual value up 0 is min
+      if (iManMode > 0)
+        iManMode--;
     }
-   
+
     //manual pos override
     if (iManMode < 6)
     {
@@ -579,6 +591,8 @@ void loop(void)
     }
 
     updateLCDandLED();
+        //OTA Functions
+    ArduinoOTA.handle();
 
     //Measure light and switch on backlight if bright
 
@@ -592,7 +606,6 @@ void loop(void)
 
     //lcd.backlight();
 
-    iValveIntervalCnt++; //count interval seconds
 
     lUpdateLCDTime = millis();
   }
@@ -681,17 +694,17 @@ void updateLCDandLED()
     else
       lcd.print(" Aut");
     //display on/off
-    if (bValveOn == true){
-          lcd.print(" Auf");
-          ledOn(LEDGN);
+    if (bValveOn == true)
+    {
+      lcd.print(" Auf");
+      ledOn(LEDGN);
     }
- 
+
     else
     {
-         lcd.print(" Zu ");
-         ledOff(LEDGN);
+      lcd.print(" Zu ");
+      ledOff(LEDGN);
     }
-     
 
     bErrorDisp = true; //display error alternately
   }
