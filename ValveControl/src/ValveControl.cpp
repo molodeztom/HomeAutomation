@@ -44,6 +44,9 @@ Home Automation Project
   20211231  V1.00: i Released and working fixed on wall, MQTT Man Auto Mode published, start with Auto Mode
   20220101  V1.01: c On interval mode open to pos 3 instead of 5, mode1 off time greater than on time
   20220102  V1.02: b Mode1 changed interval handling, off time double on time, fixed boolean operations bug
+  20220102  V1.03: b Interval2 counter was missing always 1 minute, Clean Code remove ToDos
+  20220107  V1.04: c On error activate red led, show error permanently on display until quit by red switch
+  20220107  V1.05: c Do not reset bError automatically, send text on Err channel on startup
    
 
 **************************************************************************/
@@ -65,7 +68,7 @@ Home Automation Project
 #include <DallasTemperature.h>
 #include "PCF8574.h"
 
-const String sSoftware = "ValveCtrl V1.02";
+const String sSoftware = "ValveCtrl V1.05";
 
 /***************************
  * LCD Settings
@@ -128,7 +131,6 @@ struct DATEN_STRUKTUR
  **************************/
 WiFiClient MQTT_client;
 PubSubClient mqttClient(MQTT_client);
-//TODO one channel for ValveCntrl
 //SubChannel ValvPos to receive positions from master
 //SubChannel ValvMeasurement to send temperatures, volt, current ....
 
@@ -160,7 +162,7 @@ const unsigned long ulValveSetInterval = 60 * 1000UL; //Normal 60 set valve, mea
 long lValveSetTime = 0;
 const unsigned long ulUpdateLCDInterval = 0.3 * 1000UL; //normal 1 Write text on LCD, get button, count time for valve interval, do not change
 long lUpdateLCDTime = 0;
-int iValvInterval2 = 4 ;            //interval valve value in minutes (depending on ulValveSetInterval set to 60) 5 minutes on, can be changed per mqtt remotely
+int iValvInterval2 = 4;                  //interval valve value in minutes (depending on ulValveSetInterval set to 60) 5 minutes on, can be changed per mqtt remotely
 int iValvInterval1 = iValvInterval2 * 2; //interval valve value 1
 
 /***************************
@@ -184,9 +186,6 @@ float fLux = -127;
  * PCF857XC I2C to parallel 
  **************************/
 int iPCF857XAdr = 0x20;
-bool TestLed = false;
-//TODO remove
-int iLedNr = 1;
 bool LedOn = false;
 bool bKeyPressed = false;
 PCF8574 pcf857X(iPCF857XAdr);
@@ -268,6 +267,9 @@ void setup(void)
   {
     mQTTConnect();
   }
+
+        mqttClient.publish(T_CHANNEL "/Err", "startup");
+
 
   //initialize pcf8574
   pcf857X.begin();
@@ -354,7 +356,7 @@ void loop(void)
   if ((unsigned long)(millis() - lMQTTTime) > ulMQTTInterval)
   {
     bool bMQTTalive = mqttClient.loop();
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
 
     if (WiFi.status() not_eq WL_CONNECTED)
@@ -373,9 +375,10 @@ void loop(void)
         iErrNumber = 4;
         sErrorText = "4 MQTTFailure   ";
       }
+      /* TODO remove testing error quit button
       else
       {
-        //Mqtt works reset anz WLAN or mqtt error
+                //Mqtt works reset anz WLAN or mqtt error
         if ((iErrNumber == 4) | (iErrNumber == 5))
         {
           //reset previous MQTT or WLAN error and try again
@@ -383,6 +386,7 @@ void loop(void)
           iErrNumber = 0;
         }
       }
+      */
 
       //--------------------------check MQTT connection and retry
       if (!mqttClient.connected())
@@ -398,12 +402,15 @@ void loop(void)
   {
     int iValvVolt;
     bool bDACStatus = false;
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
 
-    //on Error open valve to full
+    //on Error open valve to full TODO seems not good try to not use and see how it works with red LED alarm instead
     if (bError == true)
-      iAutoValue = 5;
+    {
+      //iAutoValue = 5;
+      ledOn(LEDRT);
+    }
 
     if (iValvPosSetP == 1)
     {
@@ -425,10 +432,10 @@ void loop(void)
         bValveOn = true; //toggle valve
         iActValvPos = 3; //valve little bit open
         //Serial.println("Int1 ON");
-        //iValveIntervalCnt = 0;
+        iValveIntervalCnt = 0;
       }
     }
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
 
     if (iValvPosSetP == 2)
@@ -437,23 +444,23 @@ void loop(void)
       ledOn(LEDGB);
       if (iValveIntervalCnt >= iValvInterval2)
       {
-       // Serial.println("Int2 triggered");
+        // Serial.println("Int2 triggered");
         iValveIntervalCnt = 0;
         if (bValveOn == true)
         {
           bValveOn = false; //toggle valve
           iActValvPos = 0;  //valve off
-         // Serial.println("Int2 OFF");
+                            // Serial.println("Int2 OFF");
         }
         else
         {
           bValveOn = true; //toggle valve
           iActValvPos = 3; //valve little bit open
-         // Serial.println("Int2 ON");
+                           // Serial.println("Int2 ON");
         }
       }
     }
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
     if (iValvPosSetP > 2 or iValvPosSetP == 0)
     {
@@ -489,7 +496,7 @@ void loop(void)
         iErrNumber = 0;
       }
     }
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
 
     data.temp1 = 0;
@@ -576,6 +583,11 @@ void loop(void)
       if (iManMode > 0)
         iManMode--;
     }
+    if ((pcf857X.digitalRead(SWRT)) == HIGH)
+    {
+      //quit error
+      bError = false;
+    }
 
     //manual pos override
     if (iManMode < 6)
@@ -591,7 +603,7 @@ void loop(void)
     }
 
     updateLCDandLED();
-        //OTA Functions
+    //OTA Functions
     ArduinoOTA.handle();
 
     //Measure light and switch on backlight if bright
@@ -605,7 +617,6 @@ void loop(void)
       lcd.backlight();
 
     //lcd.backlight();
-
 
     lUpdateLCDTime = millis();
   }
@@ -633,7 +644,8 @@ void callback(char *topic, byte *data, unsigned int dataLength)
     mqttBufValvPos[dataLength + 1] = '\0';
     iAutoValue = atoi(mqttBufValvPos);
     //if we recieve MQTT messages everything should be ok again. Reset error.
-
+    //Todo check how it works without reset reset will be done with red button instead
+    /*
     if ((iErrNumber == 4) | (iErrNumber == 5))
     {
       //reset previous MQTT or WLAN error and try again
@@ -641,163 +653,166 @@ void callback(char *topic, byte *data, unsigned int dataLength)
       iErrNumber = 0;
     }
   }
-  else if (strcmp(topic, T_CHANNEL "/SetInt") == 0)
-  {
-    // interval lenght for mode 1-2
-    memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
-    strncpy(mqttBufValvPos, (char *)data, dataLength);
-    mqttBufValvPos[dataLength + 1] = '\0';
-    iValvInterval2 = atoi(mqttBufValvPos);
-    iValvInterval1 = iValvInterval2 * 2;
-#ifdef DEBUG
-    Serial.print("Interval Set to: ");
-    Serial.println(iValvInterval2);
-#endif
+  else 
+  */
   }
-}
-
-void updateLCDandLED()
-{
-  // Write display we have 2 columns with each 16 characters
-  char valueStr[20]; //helper for conversion
-  //lcd.clear();
-  lcd.createChar(0, gradeChar);
-  lcd.setCursor(0, 0);
-  lcd.print("I:");
-  dtostrf(data.temp1, 3, 1, valueStr);
-  lcd.print(valueStr);
-  lcd.setCursor(6, 0);
-  lcd.print(" O:");
-  dtostrf(data.temp2, 3, 1, valueStr);
-  lcd.print(valueStr);
-  lcd.print(" ");
-  lcd.setCursor(14, 0);
-  lcd.write(0);
-  lcd.print("C");
-
-  if (bError == true && bErrorDisp == true)
-  {
-    lcd.setCursor(0, 1);
-    lcd.print(sErrorText);
-    ledOn(LEDRT);
-    bErrorDisp = false; //display error alternately
-  }
-  else
-  {
-    lcd.setCursor(0, 1);
-    lcd.print("Vent:");
-    lcd.print(iValvPosSetP);
-    ledOff(LEDRT);
-    //display man / auto mode
-    if (iManMode < 6)
-      lcd.print(" Man");
-    else
-      lcd.print(" Aut");
-    //display on/off
-    if (bValveOn == true)
+    if (strcmp(topic, T_CHANNEL "/SetInt") == 0)
     {
-      lcd.print(" Auf");
-      ledOn(LEDGN);
-    }
-
-    else
-    {
-      lcd.print(" Zu ");
-      ledOff(LEDGN);
-    }
-
-    bErrorDisp = true; //display error alternately
-  }
-  lcd.setCursor(15, 1);
-  lcd.print(iCount);
-}
-
-//Connect to local WIFI
-void wifiConnectStation()
-{
-  WiFi.mode(WIFI_STA);
-  WiFi.hostname(MYHOSTNAME);
+      // interval lenght for mode 1-2
+      memset(&mqttBufValvPos[0], 0, mqttRecBufSiz);
+      strncpy(mqttBufValvPos, (char *)data, dataLength);
+      mqttBufValvPos[dataLength + 1] = '\0';
+      iValvInterval2 = atoi(mqttBufValvPos);
+      iValvInterval1 = iValvInterval2 * 2;
 #ifdef DEBUG
-  Serial.println("WifiStat connecting to ");
-  Serial.println(WIFI_SSID);
+      Serial.print("Interval Set to: ");
+      Serial.println(iValvInterval2);
 #endif
-  WiFi.begin(WIFI_SSID, WIFI_PWD);
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Connect to WLAN");
-  lcd.setCursor(0, 1);
-  int iCount = 0;
-  while (WiFi.status() != WL_CONNECTED)
+    }
+  }
+
+  void updateLCDandLED()
   {
-    delay(250);
-    Serial.print(".");
-    lcd.print(".");
-    iCount++;
-    if (iCount > 16)
+    // Write display we have 2 columns with each 16 characters
+    char valueStr[20]; //helper for conversion
+    //lcd.clear();
+    lcd.createChar(0, gradeChar);
+    lcd.setCursor(0, 0);
+    lcd.print("I:");
+    dtostrf(data.temp1, 3, 1, valueStr);
+    lcd.print(valueStr);
+    lcd.setCursor(6, 0);
+    lcd.print(" O:");
+    dtostrf(data.temp2, 3, 1, valueStr);
+    lcd.print(valueStr);
+    lcd.print(" ");
+    lcd.setCursor(14, 0);
+    lcd.write(0);
+    lcd.print("C");
+
+    if (bError == true && bErrorDisp == true)
     {
       lcd.setCursor(0, 1);
-      lcd.print("                ");
-      lcd.setCursor(0, 1);
-      iCount = 0;
-    }
-  }
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Waiting");
-  Serial.println();
-}
-
-//Connect to MQTT Server
-void mQTTConnect()
-{
-  if (!mqttClient.connected())
-  {
-#ifdef DEBUG
-    Serial.println("Attempting MQTT connection...");
-    Serial.println(MQTT_USERNAME);
-    Serial.print(" ");
-    Serial.print(MQTT_KEY);
-
-#endif
-    // Attempt to connect
-    if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
-    {
-      Serial.println("connected");
-
-      mqttClient.subscribe(T_CHANNEL "/SetPos");
-
-      mqttClient.subscribe(T_CHANNEL "/SetInt");
-
-      mqttClient.setCallback(callback);
+      lcd.print(sErrorText);
+      ledOn(LEDRT);
+      bErrorDisp = false; //display error alternately
     }
     else
     {
-      Serial.print("failed, rc=");
-      Serial.print(mqttClient.state());
-      bError = true;
-      iErrNumber = 4;
-      sErrorText = "4 MQTTFailure   ";
+      lcd.setCursor(0, 1);
+      lcd.print("Vent:");
+      lcd.print(iValvPosSetP);
+      ledOff(LEDRT);
+      //display man / auto mode
+      if (iManMode < 6)
+        lcd.print(" Man");
+      else
+        lcd.print(" Aut");
+      //display on/off
+      if (bValveOn == true)
+      {
+        lcd.print(" Auf");
+        ledOn(LEDGN);
+      }
+
+      else
+      {
+        lcd.print(" Zu ");
+        ledOff(LEDGN);
+      }
+
+      bErrorDisp = true; //display error alternately
+    }
+    lcd.setCursor(15, 1);
+    lcd.print(iCount);
+  }
+
+  //Connect to local WIFI
+  void wifiConnectStation()
+  {
+    WiFi.mode(WIFI_STA);
+    WiFi.hostname(MYHOSTNAME);
+#ifdef DEBUG
+    Serial.println("WifiStat connecting to ");
+    Serial.println(WIFI_SSID);
+#endif
+    WiFi.begin(WIFI_SSID, WIFI_PWD);
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Connect to WLAN");
+    lcd.setCursor(0, 1);
+    int iCount = 0;
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(250);
+      Serial.print(".");
+      lcd.print(".");
+      iCount++;
+      if (iCount > 16)
+      {
+        lcd.setCursor(0, 1);
+        lcd.print("                ");
+        lcd.setCursor(0, 1);
+        iCount = 0;
+      }
+    }
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Waiting");
+    Serial.println();
+  }
+
+  //Connect to MQTT Server
+  void mQTTConnect()
+  {
+    if (!mqttClient.connected())
+    {
+#ifdef DEBUG
+      Serial.println("Attempting MQTT connection...");
+      Serial.println(MQTT_USERNAME);
+      Serial.print(" ");
+      Serial.print(MQTT_KEY);
+
+#endif
+      // Attempt to connect
+      if (mqttClient.connect("", MQTT_USERNAME, MQTT_KEY))
+      {
+        Serial.println("connected");
+
+        mqttClient.subscribe(T_CHANNEL "/SetPos");
+
+        mqttClient.subscribe(T_CHANNEL "/SetInt");
+
+        mqttClient.setCallback(callback);
+      }
+      else
+      {
+        Serial.print("failed, rc=");
+        Serial.print(mqttClient.state());
+        bError = true;
+        iErrNumber = 4;
+        sErrorText = "4 MQTTFailure   ";
+      }
     }
   }
-}
-// function LED on off
-void ledOn(uint8_t LedNr)
-{
-  pcf857X.digitalWrite(LedNr, LOW);
-}
-void ledOff(uint8_t LedNr)
-{
-  pcf857X.digitalWrite(LedNr, HIGH);
-}
-
-// function um eine Sensoradresse zu drucken
-void printAddress(DeviceAddress adressen)
-{
-  for (uint8_t i = 0; i < 8; i++)
+  // function LED on off
+  void ledOn(uint8_t LedNr)
   {
-    if (adressen[i] < 16)
-      Serial.print("0");
-    Serial.print(adressen[i], HEX);
-    Serial.print(":");
+    pcf857X.digitalWrite(LedNr, LOW);
   }
-}
+  void ledOff(uint8_t LedNr)
+  {
+    pcf857X.digitalWrite(LedNr, HIGH);
+  }
+
+  // function um eine Sensoradresse zu drucken
+  void printAddress(DeviceAddress adressen)
+  {
+    for (uint8_t i = 0; i < 8; i++)
+    {
+      if (adressen[i] < 16)
+        Serial.print("0");
+      Serial.print(adressen[i], HEX);
+      Serial.print(":");
+    }
+  }
