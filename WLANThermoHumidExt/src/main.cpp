@@ -22,6 +22,7 @@
  20200628   V1.0:   Temp Sens correction 
  20201019   V1.1:   Include DHT_U problem with PIO 5
  20201019   V1.2:   Password sample TEST
+ 20220108   V1.3:   Rename TempSensAdressen
 */
 
 #include <Arduino.h>
@@ -58,7 +59,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "WLANThermoHumiEXT V1.2";
+const String sSoftware = "WLANThermoHumiEXT V1.3";
 
 //Konstanten für WiFi
 #define WIFI_CHANNEL 1
@@ -112,7 +113,7 @@ void ScanForSlave();
 void printAddress(DeviceAddress adressen);
 
 //Array um Sensoradressen zu speichern (DeviceAdress ist bereits ein Array mit 8 Adressen)NEIN stimmt nicht
-DeviceAddress adressen;
+DeviceAddress TempSensAdress;
 //Array um Sensoradressen zu speichern TODO Anzahl Sensoren automatisch ermitteln
 //DeviceAddress adressenarray[2];
 
@@ -140,7 +141,7 @@ void setup()
 #endif
 
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
-  if (!sensoren.getAddress(adressen, 0))
+  if (!sensoren.getAddress(TempSensAdress, 0))
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
   }

@@ -24,6 +24,7 @@
  20200428   V1.8  2. Sensor daneben und aktiviert für vergleich
  20200522   V1.9  Converted to platformio, DEBUG with pre-compiler settings
  20201019   V1.10 Samples for passwords secrets added TEST
+ 20220108   V1.11 Rename TempSens adressen
  
  
  */
@@ -56,7 +57,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "WLANThermoEXT V1.10";
+const String sSoftware = "WLANThermoEXT V1.11";
 
 //Konstanten für WiFi
 #define WIFI_CHANNEL 1
@@ -103,7 +104,7 @@ void ScanForSlave();
 void printAddress(DeviceAddress adressen);
 
 //Array um Sensoradressen zu speichern (DeviceAdress ist bereits ein Array mit 8 Adressen)NEIN stimmt nicht
-DeviceAddress adressen;
+DeviceAddress TempSensAdress;
 //Array um Sensoradressen zu speichern TODO Anzahl Sensoren automatisch ermitteln
 //DeviceAddress adressenarray[2];
 
@@ -124,7 +125,7 @@ void setup()
 #endif
 
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
-  if (!sensoren.getAddress(adressen, 0))
+  if (!sensoren.getAddress(TempSensAdress, 0))
   {
     Serial.println("Kein Temperatursensor vorhanden!");
   }
@@ -132,26 +133,26 @@ void setup()
 #ifdef DEBUG
 
   Serial.print("Adresse1: ");
-  printAddress(adressen);
+  printAddress(TempSensAdress);
   Serial.println();
 #endif
   //2. Sensor
-  if (!sensoren.getAddress(adressen, 1))
+  if (!sensoren.getAddress(TempSensAdress, 1))
   {
     Serial.println("Kein Temperatursensor vorhanden!");
   }
 //adressen anzeigen
 #ifdef DEBUG
   Serial.print("Adresse2: ");
-  printAddress(adressen);
+  printAddress(TempSensAdress);
   Serial.println();
 #endif
   //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) TODO das ist nur für den ersten Sensor oder?
-  sensoren.setResolution(adressen, 12);
+  sensoren.setResolution(TempSensAdress, 12);
 //Zur Kontrolle lesen wir den Wert wieder aus
 #ifdef DEBUG
   Serial.print("Auflösung = ");
-  Serial.print(sensoren.getResolution(adressen), DEC);
+  Serial.print(sensoren.getResolution(TempSensAdress), DEC);
   Serial.println();
 #endif
 
