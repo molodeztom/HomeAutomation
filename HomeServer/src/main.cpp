@@ -3,11 +3,10 @@
   Home Server
 
   Hardware: 
-  ESP Board mit exteternem OLED Display und div Sensoren
+  ESP Board 
 
   Collects Information from Weather Station Base via Serial Connection
-  Displays Values with OLED
-  Send Values to Internet e.g. Thingiverse
+  Send Values to MQTT Broker
   Maintain connection to Raspberry Server like RedNode 
   History:
   2020321   V0.1:   Copy from SerialTest VV0.21:  Serial Send Data in JSON Format

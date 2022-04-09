@@ -784,6 +784,8 @@ void callback(char *topic, byte *data, unsigned int dataLength)
         mqttClient.subscribe(T_CHANNEL "/SetInt");
 
         mqttClient.setCallback(callback);
+        //if mqtt error reset on next connect
+        if(iErrNumber == 4) bError = false;
       }
       else
       {

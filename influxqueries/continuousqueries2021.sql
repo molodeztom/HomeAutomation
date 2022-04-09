@@ -3,19 +3,10 @@ Battery measurement:
 	Messung alle 5 Minuten Speichern für 6 Monate > RP half_year 
 	stündliche Werte Speichern für 1 Jahr ->RP one_year
 	tägliche Werte Speichern für immer > RP forever
-
-Befehle:
 	
-Wert anschauen:
+Wet anschauen:
 SELECT mean("fVolt") FROM half_year.sSens1 WHERE time > now() - 20m GROUP BY time(1m)
-SELECT mean("fTempA") FROM half_year.sSens1 WHERE time >= '2020-01-01T12:45:00.000000000Z' AND time <= '2021-12-31T12:55:00Z'  
-SELECT distinct("fTempA") FROM autogen.sSens1 WHERE time >= '2019-01-01T12:45:00.000000000Z' AND time <= '2021-12-31T12:55:00Z' GROUP BY time(1m)
-
-SELECT last("fTempA") FROM autogen.sSens2, two_month.sSens2, one_year.sSens2, two_years.sSens2 WHERE $timeFilter GROUP BY time(1m) fill(none)
-test anzeige in grafana:
-SELECT distinct("fTempA") FROM   two_month.SensorLoc WHERE $timeFilter GROUP BY time(1m) fill(none)
-
-DROP RETENTION POLICY two_hours ON HomeAutomation
+	
 	
 
 RPs:
@@ -30,79 +21,8 @@ ALTER RETENTION POLICY "one_year" ON "HomeAutomation" DURATION 52w
 forever
 CREATE RETENTION POLICY "forever" ON "HomeAutomation" DURATION INF REPLICATION 1 
 
-CREATE CONTINUOUS QUERY cq_1_year_S1_fHumi ON HomeAutomation BEGIN SELECT mean(fHumi) AS fHumi INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.two_month.sSens1 GROUP BY time(5m) END
 
-CREATE CONTINUOUS QUERY cq_1_year_S5_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.one_year.sSens5 FROM HomeAutomation.two_month.sSens5 GROUP BY time(5m) END
-
-
-
-
-Nach einiger Zeit sollte folgender query etwas anzeigen
-SELECT distinct("fTempA") FROM one_year.sSens1 WHERE time >= '2020-01-01T12:45:00.000000000Z' AND time <= '2020-12-28T12:55:00Z' GROUP BY time(1m)
-
- 
- grafana:
- 
- SELECT last("fHumi") FROM   two_month.sSens1 , one_year"."sSens1 , two_years.sSens1 WHERE $timeFilter GROUP BY time($__interval) fill(none)
- 
-
-22.02.2022
-Das sind alle für SLoc aktiviert
-cq_5min_SLoc_iLight          CREATE CONTINUOUS QUERY cq_5min_SLoc_iLight ON HomeAutomation BEGIN SELECT mean(iLight) AS iLight INTO HomeAutomation.one_year.SensorLoc FROM HomeAutomation.two_month.SensorLoc GROUP BY time(5m) END
-cq_1hour_SLoc_iLight         CREATE CONTINUOUS QUERY cq_1hour_SLoc_iLight ON HomeAutomation BEGIN SELECT mean(iLight) AS iLight INTO HomeAutomation.forever.SensorLoc FROM HomeAutomation.one_year.SensorLoc GROUP BY time(1h) END
-cq_5min_SLoc_fAtmo           CREATE CONTINUOUS QUERY cq_5min_SLoc_fAtmo ON HomeAutomation BEGIN SELECT mean(fAtmo) AS fAtmo INTO HomeAutomation.one_year.SensorLoc FROM HomeAutomation.two_month.SensorLoc GROUP BY time(30m) END
-cq_1hour_SLoc_fAtmo          CREATE CONTINUOUS QUERY cq_1hour_SLoc_fAtmo ON HomeAutomation BEGIN SELECT mean(fAtmo) AS fAtmo INTO HomeAutomation.forever.SensorLoc FROM HomeAutomation.one_year.SensorLoc GROUP BY time(2h) END
-cq_5min_SLoc_All             CREATE CONTINUOUS QUERY cq_5min_SLoc_All ON HomeAutomation RESAMPLE FOR 2h BEGIN SELECT mean(fTempA) AS fTempA, mean(fHumi) AS fHumi INTO HomeAutomation.autogen."HomeAutomation.one_year.sSensLoc" FROM HomeAutomation.autogen." HomeAutomation.two_month.sSensLoc" GROUP BY time(5m), * fill(none) END
-
-
-Mal versuchen mehrere auf einmal:
-CREATE CONTINUOUS QUERY "cq_5min_SLoc_All" ON "HomeAutomation" RESAMPLE FOR 2h BEGIN SELECT mean(fTempA) as "fTempA", mean(fHumi) as "fHumi" INTO "HomeAutomation.one_year.sSensLoc" FROM " HomeAutomation.two_month.sSensLoc"  GROUP BY time(5m), * fill(none) END
-
-
-CREATE CONTINUOUS QUERY "cq_5min_SLoc_All" ON "HomeAutomation"
-RESAMPLE FOR 2h
-BEGIN
-  SELECT
-    mean(fTempA) as "fTempA",
-    mean(fHumi) as "fHumi",
-  INTO "HomeAutomation.one_year.sSensLoc"
-  FROM " HomeAutomation.two_month.sSensLoc"
-  GROUP BY time(1h), * fill(none)
-END
-scheint zu gehen
---------------------------------------------------------------
-
-Hinzufügen alle S1 mit two_month 
-
-CREATE CONTINUOUS QUERY cq_5min_S1_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.two_month.sSens1 GROUP BY time(5m) END
-
- name: HomeAutomation nur S1:
- Lösche alle mit autogen DROP CONTINUOUS QUERY  cq_1_year_S1_fHumi ON HomeAutomation 
-cq_1hour_S1_fTempA           CREATE CONTINUOUS QUERY cq_1hour_S1_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.forever.sSens1 FROM HomeAutomation.one_year.sSens1 GROUP BY time(1h) END
-cq_5min_S1_fTempA            CREATE CONTINUOUS QUERY cq_5min_S1_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.two_month.sSens1 GROUP BY time(5m) END
-cq_1_hour_S1_fVolt           CREATE CONTINUOUS QUERY cq_1_hour_S1_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.half_year.sSens1 GROUP BY time(1h) END
-cq_1_day_S1_fVolt            CREATE CONTINUOUS QUERY cq_1_day_S1_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.forever.sSens1 FROM HomeAutomation.one_year.sSens1 GROUP BY time(1d) END
-
-06.02.2022
-
-name                         query
-----                         -----
-cq_1_day_S2_fVolt            CREATE CONTINUOUS QUERY cq_1_day_S2_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.forever.sSens2 FROM HomeAutomation.half_year.sSens2 GROUP BY time(1d) END
-cq_1_day_S3_fVolt            CREATE CONTINUOUS QUERY cq_1_day_S3_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.forever.sSens3 FROM HomeAutomation.half_year.sSens3 GROUP BY time(1d) END
-cq_1_day_S5_fVolt            CREATE CONTINUOUS QUERY cq_1_day_S5_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.forever.sSens5 FROM HomeAutomation.half_year.sSens5 GROUP BY time(1d) END
-cq_1hour_ValveControl_TempIn CREATE CONTINUOUS QUERY cq_1hour_ValveControl_TempIn ON HomeAutomation BEGIN SELECT mean(TempIn) AS TempIn INTO HomeAutomation.forever.ValveControl FROM HomeAutomation.one_year.ValveControl GROUP BY time(1h) END
-
-name      duration   shardGroupDuration replicaN default
-----      --------   ------------------ -------- -------
-autogen   0s         168h0m0s           1        true
-two_years 17472h0m0s 24h0m0s            1        false
-one_year  8736h0m0s  1h0m0s             1        false
-forever   0s         168h0m0s           1        false
-half_year 4368h0m0s  168h0m0s           1        false
-two_month 1344h0m0s  24h0m0s            1        false
-
-
-
+DROP RETENTION POLICY two_hours ON HomeAutomation
 
 CPs
 CREATE CONTINUOUS QUERY cq_1_hour_S1_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.half_year.sSens1 GROUP BY time(1h) END
@@ -312,7 +232,7 @@ cq_1hour_ValveControl_TempIn  CREATE CONTINUOUS QUERY cq_1hour_ValveControl_Temp
 
 
 Manuell einmalig kopieren geht so:
-SELECT fTempA INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.autogen.sSens1 Where time >= 1613329129650ms and time <= 1614635095546ms  möglichst immer 10 Wochen intervalle
+SELECT fTempA INTO HomeAutomation.two_month.sSens5 FROM HomeAutomation.autogen.sSens5 Where time >now() - 10w and time < now()  möglichst immer 10 Wochen intervalle
 Aus DB Stand 03.03.21 23:17
 
 name      duration   shardGroupDuration replicaN default
@@ -364,7 +284,7 @@ DROP RETENTION POLICY two_month ON HomeAutomation
 DROP RETENTION POLICY half_year ON HomeAutomation
 DROP RETENTION POLICY one_year ON HomeAutomation
 
-DROP CONTINUOUS QUERY  cq_1_year_S5_fTempA ON HomeAutomation
+DROP CONTINUOUS QUERY  cq_1hour_S1_fTempA   ON HomeAutomation
 DROP CONTINUOUS QUERY  cq_1hour_Humi  ON HomeAutomation
 DROP CONTINUOUS QUERY  cq_1hour_ValveControl_TempOut  ON HomeAutomation
 

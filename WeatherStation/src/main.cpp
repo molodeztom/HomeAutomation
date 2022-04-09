@@ -73,7 +73,7 @@ tm timeInfo;
 #include "WeatherStationImages.h"
 #include <ESP8266WiFi.h>
 
-#include "D:\Arduino\HomeAutomation\HomeAutomationCommon.h"
+#include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 //Bibliothek für ESP-Now
 extern "C"
