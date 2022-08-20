@@ -25,6 +25,32 @@ CREATE RETENTION POLICY "forever" ON "HomeAutomation" DURATION INF REPLICATION 1
 DROP RETENTION POLICY two_hours ON HomeAutomation
 
 CPs
+Ventilstellungen
+CREATE CONTINUOUS QUERY cq_5min_Tom_iSetTemp ON HomeAutomation BEGIN SELECT mean(iSetTemp) as iSetTemp INTO HomeAutomation.one_year.Tom FROM HomeAutomation.two_month.Tom GROUP BY time(5m)END
+
+
+ValveControl
+TempIn
+
+CREATE CONTINUOUS QUERY cq_5min_VC_TempIn ON HomeAutomation BEGIN SELECT mean(TempIn) as TempIn INTO HomeAutomation.one_year.ValveControl FROM HomeAutomation.two_month.ValveControl GROUP BY time(5m)END
+CREATE CONTINUOUS QUERY cq_1hour_VC_TempIn ON HomeAutomation BEGIN SELECT mean(TempIn) AS TempIn INTO HomeAutomation.forever.ValveControl FROM HomeAutomation.one_year.ValveControl GROUP BY time(1h) END
+TempOut
+CREATE CONTINUOUS QUERY cq_5min_VC_TempOut ON HomeAutomation BEGIN SELECT mean(TempOut) as TempOut INTO HomeAutomation.one_year.ValveControl FROM HomeAutomation.two_month.ValveControl GROUP BY time(5m)END
+CREATE CONTINUOUS QUERY cq_1hour_VC_TempOut ON HomeAutomation BEGIN SELECT mean(TempOut) AS TempOut INTO HomeAutomation.forever.ValveControl FROM HomeAutomation.one_year.ValveControl GROUP BY time(1h) END
+ValveVolt
+CREATE CONTINUOUS QUERY cq_5min_VC_ValveVolt ON HomeAutomation BEGIN SELECT mean(ValveVolt) as ValveVolt INTO HomeAutomation.one_year.ValveControl FROM HomeAutomation.two_month.ValveControl GROUP BY time(5m)END
+
+
+Sensor 1 Humi:
+ CREATE CONTINUOUS QUERY cq_5min_S1_fHumi ON HomeAutomation BEGIN SELECT mean(fHumi) AS fHumi INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.two_month.sSens1 GROUP BY time(5m) END
+ CREATE CONTINUOUS QUERY cq_1hour_S1_fHumi ON HomeAutomation BEGIN SELECT mean(fHumi) AS fHumi INTO HomeAutomation.forever.sSens1 FROM HomeAutomation.one_year.sSens1 GROUP BY time(1h) END
+
+
+Sensor 5 fTempA:
+CREATE CONTINUOUS QUERY cq_5min_S5_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.one_year.sSens5 FROM HomeAutomation.two_month.sSens5 GROUP BY time(5m) END
+CREATE CONTINUOUS QUERY cq_1hour_S5_fTempA ON HomeAutomation BEGIN SELECT mean(fTempA) AS fTempA INTO HomeAutomation.forever.sSens5 FROM HomeAutomation.one_year.sSens5 GROUP BY time(1h) END
+
+
 CREATE CONTINUOUS QUERY cq_1_hour_S1_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.one_year.sSens1 FROM HomeAutomation.half_year.sSens1 GROUP BY time(1h) END
 CREATE CONTINUOUS QUERY cq_1_day_S1_fVolt ON HomeAutomation BEGIN SELECT mean(fVolt) AS fVolt INTO HomeAutomation.forever.sSens1 FROM HomeAutomation.one_year.sSens1 GROUP BY time(1d) END
 

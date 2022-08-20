@@ -1,0 +1,1 @@
+https://api.home-connect.com/security/oauth/authorize?response_type=code&client_id=B4B6063955407A082279D9AE86BA79879C676232ADA9CD2E4F2C828F60961E61&scope=Monitor&redirect_uri=http://192.168.178.53:1880/homeconnect/auth/callback
