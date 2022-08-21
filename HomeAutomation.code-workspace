@@ -21,24 +21,11 @@
 			"path": "WeatherStation"
 		},
 		{
-			"name": "CurrentMeasurement",
-			"path": "CurrentMeasurement"
-		},
-		{
 			"name": "I2CScanner",
 			"path": "I2CScanner"
 		},
 		{
-			"name": "LCDTest",
-			"path": "..\\LCDTest"
-		},
-		{
-			"name": "Lightning seonsor",
-			"path": "Lightning seonsor"
-		},
-		{
-			"name": "Kaminari Lightning Sensor",
-			"path": "..\\Kaminari Lightning Sensor"
+			"path": "BlinkTest"
 		}
 	],
 	"settings": {}

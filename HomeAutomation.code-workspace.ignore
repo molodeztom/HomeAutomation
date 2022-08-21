@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"name": "Tasmota",
+			"path": "..\\TasmotaMaster\\Tasmota"
+		},
+		{
+			"path": "HomeAutomation\\LCDTest"
+		}
+	],
+	"settings": {}
+}
