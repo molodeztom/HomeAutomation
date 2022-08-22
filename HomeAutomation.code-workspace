@@ -26,6 +26,10 @@
 		},
 		{
 			"path": "BlinkTest"
+		},
+		{
+			"name": "ESPHubHWTest",
+			"path": "ESPHubHWTest"
 		}
 	],
 	"settings": {}
