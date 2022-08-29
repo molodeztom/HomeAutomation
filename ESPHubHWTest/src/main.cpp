@@ -17,10 +17,10 @@
 #include <Arduino.h>
 #define DEBUG
 #include <SoftwareSerial.h>
-//#include "PCF8574.h"
+#include "PCF8574.h"
 #include "Wire.h"
 #include "SSD1306Wire.h"
-#include "images.h"
+//#include "images.h"
 
 const String sSoftware = "ESPHubHWTest V0.3";
 
@@ -37,7 +37,7 @@ const String sSoftware = "ESPHubHWTest V0.3";
 int iPCF857XAdr = 0x20;
 bool LedOn = false;
 bool bKeyPressed = false;
-//PCF8574 pcf857X(iPCF857XAdr);
+PCF8574 pcf857X(iPCF857XAdr);
 
 /***************************
  * Ctrl PCB Settings
@@ -86,7 +86,7 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   pinMode(LED_BUILTIN, OUTPUT);
-  /*
+
   // initialize pcf8574
   pcf857X.begin();
   pcf857X.pinMode(SWGB, INPUT);
@@ -97,7 +97,7 @@ void setup()
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
   pcf857X.pinMode(LEDBL, OUTPUT);
-
+  
   // LED Test
   ledOn(LEDRT);
   ledOn(LEDGN);
@@ -108,16 +108,16 @@ void setup()
   ledOff(LEDGN);
   ledOff(LEDGB);
   ledOff(LEDBL);
-  */
+  
 
    // initialize display
   display.init();
   //display.displayOn();
   display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);
+  display.setFont(ArialMT_Plain_16);
  // display.setTextAlignment(TEXT_ALIGN_CENTER);
  // display.setContrast(255);
-    display.drawString(2, 10, "Hello world");
+    display.drawString(2, 10, "Hello world2");
     display.display();
     delay(1000);
   Serial.println("setup end");
@@ -129,14 +129,13 @@ void loop()
   // put your main code here, to run repeatedly:
 // clear the display
  
-   display.drawString(0, 0, "Hello world");
-
+  display.drawString(0, 0, "Hello world3");
 
   digitalWrite(LED_BUILTIN, HIGH); // turn the LED on (HIGH is the voltage level)
   delay(500);                      // wait for a second
   digitalWrite(LED_BUILTIN, LOW);  // turn the LED off by making the voltage LOW
   delay(1000);                     // wait for a second
-  /*
+  
   switch (ledNr)
   {
   case 0:
@@ -163,11 +162,11 @@ void loop()
   if (ledNr > 3)
     ledNr = 0;
   delay(500);
-  */
+  
 
 
 }
-/*
+
 // function LED on off
 void ledOn(uint8_t LedNr)
 {
@@ -177,7 +176,7 @@ void ledOff(uint8_t LedNr)
 {
   pcf857X.digitalWrite(LedNr, HIGH);
 }
-*/
+
 
 void drawFontFaceDemo() {
   // Font Demo1
