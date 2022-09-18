@@ -14,13 +14,16 @@
   20220827  V0.3:   OLED display test added
 
 */
-#include <Arduino.h>
+
+//#include <Arduino.h>
 #define DEBUG
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
 #include "Wire.h"
 #include "SSD1306Wire.h"
 #include "images.h"
+#include "display.h"
+
 
 const String sSoftware = "ESPHubHWTest V0.3";
 
@@ -149,6 +152,8 @@ void loop()
   // write the buffer to the display
   display.display();
 
+
+
   if (millis() - timeSinceLastModeSwitch > DEMO_DURATION) {
     demoMode = (demoMode + 1)  % demoLength;
     timeSinceLastModeSwitch = millis();
@@ -192,6 +197,7 @@ void loop()
 
 }
 
+
 // function LED on off
 void ledOn(uint8_t LedNr)
 {
@@ -201,7 +207,6 @@ void ledOff(uint8_t LedNr)
 {
   pcf857X.digitalWrite(LedNr, HIGH);
 }
-
 
 void drawFontFaceDemo() {
   // Font Demo1
