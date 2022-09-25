@@ -11,18 +11,28 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20220918: V0.1: Neues Projekt aus ESPHubHW Test und WeatherStation main.cpp
 20220918: V0.2: Temperatursensor DS18B20 dazu    
 20220925  V0.3: remove tempsensor it is connected to ESPWLAN instead
-
+20220925  V0.4: read BMP085 pressure sensor
 
  */
 #include <Arduino.h>
 #define DEBUG
+#include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
 #include "images.h"
+#include <ESP8266WiFi.h>
+
+// BMP085 pressure sensor
+#include <Adafruit_SPIDevice.h>
+#include "Wire.h"
+#include <Adafruit_BMP085.h>
+
+//common data e.g. sensor definitions
+#include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 
-const String sSoftware = "HubESPNow V0.3";
+const String sSoftware = "HubESPNow V0.4";
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -82,6 +92,18 @@ void drawCircleDemo();
 void drawProgressBarDemo();
 void drawImageDemo() ;
 
+/***************************
+ * Begin Atmosphere and iLightLocal Sensor Settings
+ **************************/
+//void readLight();
+void readAtmosphere();
+Adafruit_BMP085 bmp;
+//const int Light_ADDR = 0b0100011;                      // address:0x23
+//const int Atom_ADDR = 0b1110111;                       // address:0x77
+long lreadTime = 0;
+const unsigned long ulSensReadIntervall = 70 * 1000UL; //Time to evaluate received sens values for display
+
+
 Demo demos[] = {drawFontFaceDemo, drawTextFlowDemo, drawTextAlignmentDemo, drawRectDemo, drawCircleDemo, drawProgressBarDemo, drawImageDemo};
 int demoMode = 0;
 int counter = 1;
@@ -98,6 +120,15 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   pinMode(LED_BUILTIN, OUTPUT);
+  //initialize Atmosphere sensor
+  if (!bmp.begin())
+  {
+    Serial.println("Could not find BMP180 or BMP085 sensor at 0x77");
+  }
+  else
+  {
+    Serial.println("Found BMP180 or BMP085 sensor at 0x77");
+  }
 
   // initialize pcf8574
   pcf857X.begin();
@@ -151,7 +182,16 @@ void loop()
   // write the buffer to the display
   display.display();
 
+//Read local sensors pressure and light every x seconds
+  if (millis() - lreadTime > ulSensReadIntervall)
+  {
+    Serial.println("Readlocal");
+   // readLight();
+    readAtmosphere();
+   // formatTempExt();
 
+    lreadTime = millis();
+  }
 
   if (millis() - timeSinceLastModeSwitch > DEMO_DURATION) {
     demoMode = (demoMode + 1)  % demoLength;
@@ -288,3 +328,21 @@ void drawImageDemo() {
   display.drawXbm(34, 14, WiFi_Logo_width, WiFi_Logo_height, WiFi_Logo_bits);
 }
 
+//BMP180 pressure sensor
+
+void readAtmosphere()
+{
+
+  sSensor0.fAtmo = bmp.readPressure();
+  sSensor0.fAtmo = sSensor0.fAtmo / 100;
+
+#ifdef DEBUG
+  int bmpTemp;
+  bmpTemp = bmp.readTemperature();
+  Serial.print("Pressure = ");
+  Serial.print(sSensor0.fAtmo);
+  Serial.println(" Pascal");
+  Serial.print("BMP Temp = ");
+  Serial.println(bmpTemp);
+#endif
+}
