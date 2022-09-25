@@ -8,8 +8,9 @@ Empfang von externen Temperaturwerten über ESP-Now
 Versenden der Werte über WLAN an Thingspeak
 Versenden der Werte in JSON Format an HomeServer über Serial
 
-202209189:  V0.1: Neues Projekt aus ESPHubHW Test und WeatherStation main.cpp
-
+20220918: V0.1: Neues Projekt aus ESPHubHW Test und WeatherStation main.cpp
+20220918: V0.2: Temperatursensor DS18B20 dazu    
+20220925  V0.3: remove tempsensor it is connected to ESPWLAN instead
 
 
  */
@@ -17,11 +18,11 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #define DEBUG
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
-#include "Wire.h"
 #include "SSD1306Wire.h"
 #include "images.h"
 
-const String sSoftware = "HubESPNow V0.1";
+
+const String sSoftware = "HubESPNow V0.3";
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -29,6 +30,8 @@ const String sSoftware = "HubESPNow V0.1";
 //  For NodeMCU Lua Lolin V3: D1=GPIO5 = SCL D2=GPIO4 = SDA set to SDA_PIN 4, SCL_PIN 5, D7=13
 //#define SDA_PIN 4
 //#define SCL_PIN 5
+
+
 
 /***************************
  * PCF857XC I2C to parallel
@@ -284,3 +287,4 @@ void drawImageDemo() {
   // on how to create xbm files
   display.drawXbm(34, 14, WiFi_Logo_width, WiFi_Logo_height, WiFi_Logo_bits);
 }
+
