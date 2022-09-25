@@ -12,6 +12,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20220918: V0.2: Temperatursensor DS18B20 dazu    
 20220925  V0.3: remove tempsensor it is connected to ESPWLAN instead
 20220925  V0.4: read BMP085 pressure sensor
+20220925  V0.5: read "Arbeitszimmer" sensor using ESPNow
 
  */
 #include <Arduino.h>
@@ -28,11 +29,46 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include "Wire.h"
 #include <Adafruit_BMP085.h>
 
+//Bibliothek für ESP-Now
+extern "C"
+{
+#include <espnow.h>
+}
+
 //common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 
-const String sSoftware = "HubESPNow V0.4";
+const String sSoftware = "HubESPNow V0.5";
+
+//used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
+#define BATTCORR1 -0.099
+#define BATTCORR2 -0.018
+#define BATTCORR3 -0.018
+#define BATTCORR4 -0.018
+#define BATTCORR5 -0.21
+#define SENSCORR1A -0.25
+
+//struct for exchanging data over ESP NOW
+struct DATEN_STRUKTUR
+{
+  int iSensorChannel = 99;  //default for none received
+  float fESPNowTempA = -99; //Aussen A
+  float fESPNowTempB = -99; //Aussen B
+  float fESPNowHumi = -99;
+  float fESPNowVolt = -99; //Batterie Sensor
+};
+
+/***************************
+ * ESP Now Settings
+ **************************/
+//SSID Open for some time. Sensors can contact AP to connect. After that time sensor use stored MAC adress
+long lAPOpenTime = 0;
+const unsigned long ulAPOpenIntervall = 240 * 1000UL; //time in sec
+bool APOpen = false;
+//ESP Now
+void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
+
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -92,6 +128,7 @@ void drawCircleDemo();
 void drawProgressBarDemo();
 void drawImageDemo() ;
 
+
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
  **************************/
@@ -118,8 +155,33 @@ int ledNr = 0;
 void setup()
 {
   Serial.begin(115200);
-  Serial.println();
+  Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
+  // WIFI ESPNOW
+  WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
+ //Reset WiFI
+  WiFi.disconnect();
+  WiFi.mode(WIFI_AP);
+  WiFi.begin();
+  //AP for sensors to ask for station MAC adress
+  WiFi.softAP(APSSID);
+  Serial.println("Start AP");
+  Serial.println(APSSID);
+  APOpen = true;
+  lAPOpenTime = millis();
+  delay(1000);
+
+  if (esp_now_init() != 0)
+  {
+    Serial.println("Init ESP-Now failed restart");
+    ESP.restart();
+  }
+  // ESP Role  1=Master, 2 = Slave 3 = Master + Slave
+  Serial.println("Set espnow Role 2");
+  esp_now_set_self_role(2);
+  //callback for received ESP NOW messages
+  esp_now_register_recv_cb(on_receive_data);
+
   //initialize Atmosphere sensor
   if (!bmp.begin())
   {
@@ -129,6 +191,8 @@ void setup()
   {
     Serial.println("Found BMP180 or BMP085 sensor at 0x77");
   }
+
+
 
   // initialize pcf8574
   pcf857X.begin();
@@ -169,7 +233,7 @@ void setup()
 
 void loop()
 {
-  // put your main code here, to run repeatedly:
+
 // clear the display
  
   display.clear();
@@ -181,6 +245,17 @@ void loop()
   display.drawString(128, 54, String(millis()));
   // write the buffer to the display
   display.display();
+   //Close Wifi AP after some time
+
+  if ((millis() - lAPOpenTime > ulAPOpenIntervall) && APOpen == true)
+  {
+    WiFi.softAPdisconnect();
+ 
+    APOpen = false;
+#ifdef DEBUG
+    Serial.println("AP disconnect");
+#endif
+  }
 
 //Read local sensors pressure and light every x seconds
   if (millis() - lreadTime > ulSensReadIntervall)
@@ -192,6 +267,19 @@ void loop()
 
     lreadTime = millis();
   }
+
+  //Every x seconds check sensor readings, if no reading count up and then do not display
+  if ((millis() - lSensorValidTime > ulSensorValidIntervall))
+  {
+    Serial.println("Sensor count up");
+    sSensor1.iSensorCnt++;
+    sSensor2.iSensorCnt++;
+    sSensor3.iSensorCnt++;
+    //sSensor4.iSensorCnt++;
+    sSensor5.iSensorCnt++;
+    lSensorValidTime = millis();
+  }
+
 
   if (millis() - timeSinceLastModeSwitch > DEMO_DURATION) {
     demoMode = (demoMode + 1)  % demoLength;
@@ -235,6 +323,105 @@ void loop()
 
 
 }
+
+//Callback funktion wenn Daten über ESP-Now empfangen wurden
+void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
+{
+
+  DATEN_STRUKTUR sESPReceive;
+   //copy received data to struct, to get access via variables
+  memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
+  //TODO check values and send further only if correct
+  //iSensorChannel = sESPReceive.iSensorChannel;
+#ifdef DEBUG
+  Serial.print("Channel: ");
+  Serial.println(sESPReceive.iSensorChannel);
+#endif
+
+  //depending on channel
+  switch (sESPReceive.iSensorChannel)
+  {
+  case 1:
+    sSensor1.fTempA = roundf((sESPReceive.fESPNowTempA + SENSCORR1A) * 100) / 100;
+    sSensor1.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
+    sSensor1.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR1) * 100) / 100;
+    sSensor1.bSensorRec = true;
+    sSensor1.iSensorCnt = 0;
+
+#ifdef DEBUG
+    Serial.print("Temperatur 1A: ");
+    Serial.println(sSensor1.fTempA);
+    Serial.print("extHumidity: ");
+    Serial.println(sSensor1.fHumi);
+    Serial.print("Batt1 V: ");
+    Serial.println(sSensor1.fVolt);
+#endif
+    break;
+  case 2:
+    sSensor2.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
+    sSensor2.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR2) * 100) / 100;
+    sSensor2.bSensorRec = true;
+    sSensor2.iSensorCnt = 0;
+#ifdef DEBUG
+    Serial.println("Recieved Data 2");
+    Serial.print("Temperatur 2A: ");
+    Serial.println(sSensor2.fTempA);
+    Serial.print("Batt2 V: ");
+    Serial.println(sSensor2.fVolt);
+#endif
+    break;
+  case 3:
+    sSensor3.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
+    sSensor3.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR3) * 100) / 100;
+    sSensor3.bSensorRec = true;
+    sSensor3.iSensorCnt = 0;
+#ifdef DEBUG
+    Serial.println("Recieved Data 3");
+    Serial.print("Temperatur 3: ");
+    Serial.println(sSensor3.fTempA);
+    Serial.print("Batt3 V: ");
+    Serial.println(sSensor3.fVolt);
+#endif
+    break;
+  case 4:
+    sSensor4.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
+    sSensor4.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR4) * 100) / 100;
+    sSensor4.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
+    sSensor4.bSensorRec = true;
+    sSensor4.iSensorCnt = 0;
+#ifdef DEBUG
+    Serial.println("Recieved Data 4");
+    Serial.print("Temperatur 4: ");
+    Serial.println(sSensor4.fTempA);
+    Serial.print("Batt4 V: ");
+    Serial.println(sSensor4.fVolt);
+    Serial.print("extHumidity: ");
+    Serial.println(sSensor4.fHumi);
+#endif
+
+    break;
+  case 5:
+    sSensor5.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
+    sSensor5.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR5) * 100) / 100;
+    sSensor5.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
+    sSensor5.bSensorRec = true;
+    sSensor5.iSensorCnt = 0;
+#ifdef DEBUG
+    Serial.println("Recieved Data 5");
+    Serial.print("Temperatur 5: ");
+    Serial.println(sSensor5.fTempA);
+    Serial.print("Batt5 V: ");
+    Serial.println(sSensor5.fVolt);
+    Serial.print("extHumidity: ");
+    Serial.println(sSensor5.fHumi);
+#endif
+
+    break;
+  default:
+    Serial.println("Default Channel do nothing");
+    break;
+  }
+};
 
 
 // function LED on off
