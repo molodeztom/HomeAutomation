@@ -23,6 +23,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
 #include "images.h"
+
 #include <ESP8266WiFi.h>
 
 // BMP085 pressure sensor
@@ -115,6 +116,8 @@ const int SCL_PIN = D1;
 SSD1306Wire display(0x3c,SDA_PIN,SCL_PIN);
 
 // Forward declarations
+// flag changed in the ticker function every 10 minutes
+
 void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 
@@ -207,6 +210,8 @@ void setup()
     display.drawString(2, 10, sSoftware);
     display.display();
     delay(2500);
+
+    
   Serial.println("setup end");
 
 }

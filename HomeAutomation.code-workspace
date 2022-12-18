@@ -32,10 +32,6 @@
 			"path": "ESPHubHWTest"
 		},
 		{
-			"name": "esp8266-oled-ssd1306",
-			"path": "..\\esp8266-oled-ssd1306"
-		},
-		{
 			"name": "HubESPNow",
 			"path": "HubESPNow"
 		}
