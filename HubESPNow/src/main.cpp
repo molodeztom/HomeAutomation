@@ -14,6 +14,8 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20220925  V0.4: read BMP085 pressure sensor
 20220925  V0.5: read "Arbeitszimmer" sensor using ESPNow
 20221121  V0.6: remove display demo
+20221218  V0.7: remove blinking LEDS
+20221218  V0.8: read SW and switch on red led
 
  */
 #include <Arduino.h>
@@ -41,7 +43,7 @@ extern "C"
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
 
-const String sSoftware = "HubESPNow V0.6";
+const String sSoftware = "HubESPNow V0.8";
 
 //used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
 #define BATTCORR1 -0.099
@@ -96,10 +98,13 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define LEDGN P5
 #define LEDBL P7
 #define LEDRT P4
-#define SWGB P0
-#define SWGN P1
-#define SWBL P2
-#define SWRT P3
+#define SW4 P0
+#define SW3 P1
+#define SW2 P2
+#define SW1 P3
+
+long lswitchReadTime = 0;
+const unsigned long ulSwitchReadInterval =  0.3 * 1000UL; //Time until switch is read next time in s
 
 /***************************
  * Display Settings
@@ -179,10 +184,10 @@ void setup()
 
   // initialize pcf8574
   pcf857X.begin();
-  pcf857X.pinMode(SWGB, INPUT);
-  pcf857X.pinMode(SWGN, INPUT);
-  pcf857X.pinMode(SWRT, INPUT);
-  pcf857X.pinMode(SWBL, INPUT);
+  pcf857X.pinMode(SW4, INPUT);
+  pcf857X.pinMode(SW3, INPUT);
+  pcf857X.pinMode(SW1, INPUT);
+  pcf857X.pinMode(SW2, INPUT);
   pcf857X.pinMode(LEDRT, OUTPUT);
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
@@ -250,6 +255,18 @@ void loop()
     lreadTime = millis();
   }
 
+  //Read input switches every x seconds
+  if (millis() - lswitchReadTime > ulSwitchReadInterval)
+  {
+    Serial.println("ReadSwitches");
+if(pcf857X.digitalRead(SW4) == HIGH)
+{
+    ledOn(LEDRT);
+}
+
+    lreadTime = millis();
+  }
+
   //Every x seconds check sensor readings, if no reading count up and then do not display
   if ((millis() - lSensorValidTime > ulSensorValidIntervall))
   {
@@ -263,33 +280,6 @@ void loop()
   }
 
 
-  switch (ledNr)
-  {
-  case 0:
-    ledOn(LEDBL);
-    ledOff(LEDRT);
-    break;
-  case 1:
-    ledOn(LEDGB);
-    ledOff(LEDBL);
-    break;
-  case 2:
-    ledOn(LEDGN);
-    ledOff(LEDGB);
-    break;
-  case 3:
-    ledOn(LEDRT);
-    ledOff(LEDGN);
-    break;
-
-  default:
-    break;
-  }
-  ledNr++;
-  if (ledNr > 3)
-    ledNr = 0;
-  delay(500);
-  
 
 
 }

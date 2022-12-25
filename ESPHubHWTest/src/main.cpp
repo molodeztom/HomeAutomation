@@ -104,8 +104,8 @@ void setup()
   pcf857X.begin();
   pcf857X.pinMode(SWGB, INPUT);
   pcf857X.pinMode(SWGN, INPUT);
-  pcf857X.pinMode(SWRT, INPUT);
-  pcf857X.pinMode(SWBL, INPUT);
+  pcf857X.pinMode(SW1, INPUT);
+  pcf857X.pinMode(SW2, INPUT);
   pcf857X.pinMode(LEDRT, OUTPUT);
   pcf857X.pinMode(LEDGN, OUTPUT);
   pcf857X.pinMode(LEDGB, OUTPUT);
