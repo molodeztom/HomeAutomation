@@ -18,6 +18,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20221218  V0.8:   read SW and switch on red led
 20230101  V0.9:   Soft AP to separate function
 20230101  V0.10:  display Soft AP on in OLED
+20230101  V0.11:  display rest time for soft AP in OLED
 
  */
 #include <Arduino.h>
@@ -45,7 +46,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.10";
+const String sSoftware = "HubESPNow V0.11";
 
 // used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
 #define BATTCORR1 -0.099
@@ -65,13 +66,18 @@ struct DATEN_STRUKTUR
   float fESPNowVolt = -99; // Batterie Sensor
 };
 
+// Timing seconds for various uses
+long lSecondsTime = 0;
+const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec
+
 /***************************
  * ESP Now Settings
  **************************/
 // SSID Open for some time. Sensors can contact AP to connect. After that time sensor use stored MAC adress
-long lAPOpenTime = 0; // Timing
+long lAPOpenTime = 0;       // Timing
+int sSecondsUntilClose = 0; // counter to display how long still open
 // TODO: set back to 240 sec
-const unsigned long ulAPOpenIntervall = 60 * 1000UL; // time in sec
+const unsigned long ulAPOpenInterval = 60 * 1000UL; // time in sec
 bool APOpen = false;
 // ESP Now
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
@@ -128,6 +134,7 @@ const unsigned long ulUpdateDisplayInterval = 0.3 * 1000UL; // Time until displa
 void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 void openWifiAP();
+void updateDisplay();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -138,7 +145,7 @@ Adafruit_BMP085 bmp;
 // const int Light_ADDR = 0b0100011;                      // address:0x23
 // const int Atom_ADDR = 0b1110111;                       // address:0x77
 long lreadTime = 0;
-const unsigned long ulSensReadIntervall = 70 * 1000UL; // Timing Time to evaluate received sens values for display
+const unsigned long ulSensReadInterval = 70 * 1000UL; // Timing Time to evaluate received sens values for display
 
 int ledNr = 0;
 
@@ -217,9 +224,19 @@ void setup()
 void loop()
 {
 
-  // Close Wifi AP after some time
+  // 1 sec timer for blinking and time update
+  if ((millis() - lSecondsTime > ulSecondsInterval))
+  {
+    // counter how long AP still open
+    if (APOpen == true)
+    {
+      sSecondsUntilClose--;
+    }
+    lSecondsTime = millis();
+  }
 
-  if ((millis() - lAPOpenTime > ulAPOpenIntervall) && APOpen == true)
+  // Close Wifi AP after some time
+  if ((millis() - lAPOpenTime > ulAPOpenInterval) && APOpen == true)
   {
     WiFi.softAPdisconnect();
     ledOff(LEDRT);
@@ -230,7 +247,7 @@ void loop()
   }
 
   // Read local sensors pressure and light every x seconds
-  if (millis() - lreadTime > ulSensReadIntervall)
+  if (millis() - lreadTime > ulSensReadInterval)
   {
     Serial.println("Readlocal");
     // readLight();
@@ -255,20 +272,7 @@ void loop()
   // Update display every x seconds
   if (millis() - lsUpdateDisplay > ulUpdateDisplayInterval)
   {
-    // clear the display
-    display.clear(); // TODO do we need this
-    display.setFont(ArialMT_Plain_10);
-    display.setTextAlignment(TEXT_ALIGN_RIGHT);
-    // test output millisec
-    display.drawString(128, 54, String(millis()));
-    //display flag for open AP
-    if (APOpen == true)
-    {
-      display.drawString(128, 0, "AP");
-    }
-    // write the buffer to the display
-    display.display();
-
+    updateDisplay();
     lsUpdateDisplay = millis();
   }
 
@@ -422,5 +426,24 @@ void openWifiAP()
   Serial.println("Start AP");
   Serial.println(APSSID);
   APOpen = true;
+  sSecondsUntilClose = ulAPOpenInterval / 1000UL;
   lAPOpenTime = millis();
+}
+
+void updateDisplay()
+{
+  // clear the display
+  display.clear(); // TODO do we need this
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_RIGHT);
+  // test output millisec
+  display.drawString(128, 54, String(millis()));
+  // display flag for open AP
+  if (APOpen == true)
+  {
+    display.drawString(115, 0, "AP:");
+    display.drawString(128, 0, String(sSecondsUntilClose));
+  }
+  // write the buffer to the display
+  display.display();
 }
