@@ -19,6 +19,8 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230101  V0.9:   Soft AP to separate function
 20230101  V0.10:  display Soft AP on in OLED
 20230101  V0.11:  display rest time for soft AP in OLED
+20230106  V0.12:  +OTA programming interface
+20230107  V0.13:  OTA now works with SW2
 
  */
 #include <Arduino.h>
@@ -29,6 +31,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
 #include "images.h"
+#include <ArduinoOTA.h>
 
 #include <ESP8266WiFi.h>
 
@@ -46,7 +49,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.11";
+const String sSoftware = "HubESPNow V0.13";
 
 // used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
 #define BATTCORR1 -0.099
@@ -70,6 +73,16 @@ struct DATEN_STRUKTUR
 long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec
 
+// program is running on one of these modes
+// normal, AP Open to add a new sensor, OTA only active to do an OTA
+enum eProgramModes
+{
+  normal,
+  aPopen,
+  oTAActive
+};
+eProgramModes ProgramMode = normal;
+
 /***************************
  * ESP Now Settings
  **************************/
@@ -78,9 +91,13 @@ long lAPOpenTime = 0;       // Timing
 int sSecondsUntilClose = 0; // counter to display how long still open
 // TODO: set back to 240 sec
 const unsigned long ulAPOpenInterval = 60 * 1000UL; // time in sec
-bool APOpen = false;
+
 // ESP Now
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
+/***************************
+ * OTA
+ **************************/
+#define MYHOSTNAME "HubESPNow"
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -135,6 +152,7 @@ void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 void openWifiAP();
 void updateDisplay();
+void startOTA();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -154,6 +172,7 @@ void setup()
   Serial.begin(115200);
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
+  ProgramMode = normal;
   // WIFI ESPNOW
   WiFi.persistent(false); // https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
   // Reset WiFI
@@ -161,7 +180,6 @@ void setup()
   WiFi.mode(WIFI_AP);
   WiFi.begin();
   // AP for sensors to ask for station MAC adress
-  // TODO activate again openWifiAP();
   delay(1000);
 
   if (esp_now_init() != 0)
@@ -169,9 +187,11 @@ void setup()
     Serial.println("Init ESP-Now failed restart");
     ESP.restart();
   }
+
   // ESP Role  1=Master, 2 = Slave 3 = Master + Slave
   Serial.println("Set espnow Role 2");
   esp_now_set_self_role(2);
+
   // callback for received ESP NOW messages
   esp_now_register_recv_cb(on_receive_data);
 
@@ -224,11 +244,14 @@ void setup()
 void loop()
 {
 
+  if (ProgramMode == oTAActive)
+    ArduinoOTA.handle();
+
   // 1 sec timer for blinking and time update
   if ((millis() - lSecondsTime > ulSecondsInterval))
   {
     // counter how long AP still open
-    if (APOpen == true)
+    if (ProgramMode == aPopen)
     {
       sSecondsUntilClose--;
     }
@@ -236,11 +259,12 @@ void loop()
   }
 
   // Close Wifi AP after some time
-  if ((millis() - lAPOpenTime > ulAPOpenInterval) && APOpen == true)
+  if ((millis() - lAPOpenTime > ulAPOpenInterval) && ProgramMode == aPopen)
   {
     WiFi.softAPdisconnect();
     ledOff(LEDRT);
-    APOpen = false;
+    ProgramMode = normal;
+
 #ifdef DEBUG
     Serial.println("AP disconnect");
 #endif
@@ -262,8 +286,26 @@ void loop()
   {
     if (pcf857X.digitalRead(SW4) == HIGH)
     {
-      ledOn(LEDRT);
-      openWifiAP();
+      // SW4 pressed starts AP to add more sensors
+      //  TODO make better
+      // only in normal mode e.g. do not activate while in OTA
+      if (ProgramMode == normal)
+      {
+
+        ledOn(LEDRT);
+        openWifiAP();
+      }
+    }
+    if (pcf857X.digitalRead(SW3) == HIGH)
+    {
+      // SW3 pressed starts OTA to update firmware
+      ledOn(LEDGN);
+      startOTA();
+      ledOff(LEDRT);
+#ifdef DEBUG
+      Serial.println("AP disconnect");
+#endif
+      startOTA();
     }
 
     lreadTime = millis();
@@ -279,7 +321,7 @@ void loop()
   // Every x seconds check sensor readings, if no reading count up and then do not display
   if ((millis() - lSensorValidTime > ulSensorValidIntervall))
   {
-    Serial.println("Sensor count up");
+    // Serial.println("Sensor count up");
     sSensor1.iSensorCnt++;
     sSensor2.iSensorCnt++;
     sSensor3.iSensorCnt++;
@@ -423,11 +465,30 @@ void openWifiAP()
   WiFi.mode(WIFI_AP);
   WiFi.begin();
   WiFi.softAP(APSSID);
-  Serial.println("Start AP");
+  Serial.print("Start AP: ");
   Serial.println(APSSID);
-  APOpen = true;
+  ProgramMode = aPopen;
   sSecondsUntilClose = ulAPOpenInterval / 1000UL;
   lAPOpenTime = millis();
+}
+
+// Connect to local WIFI
+void wifiConnectStation()
+{
+  WiFi.mode(WIFI_STA);
+  WiFi.hostname(MYHOSTNAME);
+#ifdef DEBUG
+  Serial.println("WifiStat connecting to ");
+  Serial.println(WIFI_SSID);
+#endif
+  WiFi.begin(WIFI_SSID, WIFI_PWD);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(250);
+    Serial.print(".");
+  }
+
+  Serial.println();
 }
 
 void updateDisplay()
@@ -439,11 +500,58 @@ void updateDisplay()
   // test output millisec
   display.drawString(128, 54, String(millis()));
   // display flag for open AP
-  if (APOpen == true)
+  if (ProgramMode == aPopen)
   {
     display.drawString(115, 0, "AP:");
     display.drawString(128, 0, String(sSecondsUntilClose));
   }
   // write the buffer to the display
   display.display();
+}
+
+void startOTA()
+{
+  // Disconnect Wifi and connect to local WLAN
+  // OTA Setup PWD comes from HomeAutomationSecrets.h outside repository
+
+#ifdef DEBUG
+  Serial.println("StartOTA");
+#endif
+  WiFi.softAPdisconnect();
+  ledOff(LEDRT);
+  ProgramMode = oTAActive;
+  WiFi.disconnect();
+  WiFi.mode(WIFI_STA);
+  WiFi.hostname(MYHOSTNAME);
+#ifdef DEBUG
+  Serial.println("WifiStat connecting to ");
+  Serial.println(WIFI_SSID);
+#endif
+  WiFi.begin(WIFI_SSID, WIFI_PWD);
+  int iCount = 0;
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(250);
+    Serial.print(".");
+    /*lcd.print(".");
+    iCount++;
+    if (iCount > 16)
+    {
+      lcd.setCursor(0, 1);
+      lcd.print("                ");
+      lcd.setCursor(0, 1);
+      iCount = 0;
+    }
+    */
+  }
+  Serial.print("connected to WLAN");
+  ArduinoOTA.setHostname(MYHOSTNAME);
+  ArduinoOTA.setPassword(OTA_PWD);
+  ArduinoOTA.begin();
+  ArduinoOTA.onStart([]()
+                     { Serial.println("OTA Start"); });
+  ArduinoOTA.onEnd([]()
+                   {
+                   ESP.restart();
+                   Serial.println("OTA End"); });
 }
