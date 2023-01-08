@@ -21,6 +21,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230101  V0.11:  display rest time for soft AP in OLED
 20230106  V0.12:  +OTA programming interface
 20230107  V0.13:  OTA now works with SW2
+20230107  V0.14:  Show OTA Info in display, End OTA if not already started
 
  */
 #include <Arduino.h>
@@ -30,6 +31,8 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
+// Include the UI lib TODO try the ui LIB
+// #include "OLEDDisplayUi.h"
 #include "images.h"
 #include <ArduinoOTA.h>
 
@@ -49,7 +52,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.13";
+const String sSoftware = "HubESPNow V0.14a";
 
 // used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
 #define BATTCORR1 -0.099
@@ -82,6 +85,7 @@ enum eProgramModes
   oTAActive
 };
 eProgramModes ProgramMode = normal;
+bool bOTARunning = false; // true if OTA already running to prevent stop
 
 /***************************
  * ESP Now Settings
@@ -179,7 +183,6 @@ void setup()
   WiFi.disconnect();
   WiFi.mode(WIFI_AP);
   WiFi.begin();
-  // AP for sensors to ask for station MAC adress
   delay(1000);
 
   if (esp_now_init() != 0)
@@ -194,6 +197,42 @@ void setup()
 
   // callback for received ESP NOW messages
   esp_now_register_recv_cb(on_receive_data);
+
+  // OTA handler
+  ArduinoOTA.onStart([]()
+                     {
+                       Serial.println("OTA Start");
+                       bOTARunning = true;
+                       display.clear();
+                       display.drawString(0, 10, "OTA Starting");
+                       // write the buffer to the display
+                       display.display();
+                       ledOn(LEDBL); });
+
+  ArduinoOTA.onEnd([]()
+                   {
+                    display.clear();
+                    display.drawString(0, 10, "OTA Successful");
+                    // write the buffer to the display
+                    display.display();
+                    ledOff(LEDBL);
+                    delay(2000);
+                    bOTARunning = false;
+                  
+                    Serial.println("OTA End"); });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+                        { 
+                          
+                          display.clear();
+                    display.drawString(0, 10, "OTA Update");
+                    display.drawProgressBar(0,40,100,20,(progress / (total / 100)));
+
+                        //   snprintf(sTemp,20,"Progress: %u%%\r", (progress / (total / 100)));
+                          // display.drawString(0, 40,sTemp);
+                    // write the buffer to the display
+                    display.display();
+                          Serial.printf("Progress: %u%%\r", (progress / (total / 100))); });
 
   // initialize Atmosphere sensor
   if (!bmp.begin())
@@ -243,9 +282,6 @@ void setup()
 
 void loop()
 {
-
-  if (ProgramMode == oTAActive)
-    ArduinoOTA.handle();
 
   // 1 sec timer for blinking and time update
   if ((millis() - lSecondsTime > ulSecondsInterval))
@@ -298,14 +334,23 @@ void loop()
     }
     if (pcf857X.digitalRead(SW3) == HIGH)
     {
-      // SW3 pressed starts OTA to update firmware
-      ledOn(LEDGN);
-      startOTA();
-      ledOff(LEDRT);
+     // SW3 pressed starts OTA to update firmware
+      if (ProgramMode != oTAActive)
+      {
+        //not yet running
+        ledOn(LEDGN);
+        startOTA();
+        ledOff(LEDRT);
+      }
+      else if(bOTARunning == false)
+      {
+         //SW 3 pressed again stop update and reboot
 #ifdef DEBUG
-      Serial.println("AP disconnect");
+        Serial.println("OTA stopped");
 #endif
-      startOTA();
+        ledOff(LEDRT);
+        ESP.restart();
+      }
     }
 
     lreadTime = millis();
@@ -314,6 +359,11 @@ void loop()
   // Update display every x seconds
   if (millis() - lsUpdateDisplay > ulUpdateDisplayInterval)
   {
+    if (ProgramMode == oTAActive)
+    {
+      ArduinoOTA.handle();
+    }
+
     updateDisplay();
     lsUpdateDisplay = millis();
   }
@@ -505,6 +555,12 @@ void updateDisplay()
     display.drawString(115, 0, "AP:");
     display.drawString(128, 0, String(sSecondsUntilClose));
   }
+  if (ProgramMode == oTAActive)
+  {
+    display.setFont(ArialMT_Plain_16);
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
+    display.drawString(0, 0, "OTA Update");
+  }
   // write the buffer to the display
   display.display();
 }
@@ -516,6 +572,7 @@ void startOTA()
 
 #ifdef DEBUG
   Serial.println("StartOTA");
+  Serial.println("AP disconnect");
 #endif
   WiFi.softAPdisconnect();
   ledOff(LEDRT);
@@ -528,8 +585,7 @@ void startOTA()
   Serial.println(WIFI_SSID);
 #endif
   WiFi.begin(WIFI_SSID, WIFI_PWD);
-  int iCount = 0;
-  while (WiFi.status() != WL_CONNECTED)
+   while (WiFi.status() != WL_CONNECTED)
   {
     delay(250);
     Serial.print(".");
@@ -545,13 +601,8 @@ void startOTA()
     */
   }
   Serial.print("connected to WLAN");
+  display.drawString(0, 15, "OTA Init");
   ArduinoOTA.setHostname(MYHOSTNAME);
   ArduinoOTA.setPassword(OTA_PWD);
   ArduinoOTA.begin();
-  ArduinoOTA.onStart([]()
-                     { Serial.println("OTA Start"); });
-  ArduinoOTA.onEnd([]()
-                   {
-                   ESP.restart();
-                   Serial.println("OTA End"); });
 }
