@@ -22,11 +22,13 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230106  V0.12:  +OTA programming interface
 20230107  V0.13:  OTA now works with SW2
 20230107  V0.14:  Show OTA Info in display, End OTA if not already started
+20230108  V0.15:  cError in readtime for sensor BMP
+20230109  V0.16:  +Debug Macros
 
  */
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-#define DEBUG
+#define DEBUG 1
 #include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
@@ -52,7 +54,16 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.14a";
+const String sSoftware = "HubESPNow V0.16";
+
+// debug macro
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Serial.println(x)
+#else
+#define debug(x)
+#define debugln(x)
+#endif
 
 // used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
 #define BATTCORR1 -0.099
@@ -187,12 +198,12 @@ void setup()
 
   if (esp_now_init() != 0)
   {
-    Serial.println("Init ESP-Now failed restart");
+    debugln("Init ESP-Now failed restart");
     ESP.restart();
   }
 
   // ESP Role  1=Master, 2 = Slave 3 = Master + Slave
-  Serial.println("Set espnow Role 2");
+  debugln("Set espnow Role 2");
   esp_now_set_self_role(2);
 
   // callback for received ESP NOW messages
@@ -201,10 +212,10 @@ void setup()
   // OTA handler
   ArduinoOTA.onStart([]()
                      {
-                       Serial.println("OTA Start");
+                       debugln("OTA Start");
                        bOTARunning = true;
                        display.clear();
-                       display.drawString(0, 10, "OTA Starting");
+                       display.drawString(0, 10, "OTA Wait for Upload");
                        // write the buffer to the display
                        display.display();
                        ledOn(LEDBL); });
@@ -219,7 +230,7 @@ void setup()
                     delay(2000);
                     bOTARunning = false;
                   
-                    Serial.println("OTA End"); });
+                    debugln("OTA End"); });
 
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
                         { 
@@ -237,11 +248,11 @@ void setup()
   // initialize Atmosphere sensor
   if (!bmp.begin())
   {
-    Serial.println("Could not find BMP180 or BMP085 sensor at 0x77");
+    debugln("Could not find BMP180 or BMP085 sensor at 0x77");
   }
   else
   {
-    Serial.println("Found BMP180 or BMP085 sensor at 0x77");
+    debugln("Found BMP180 or BMP085 sensor at 0x77");
   }
 
   // initialize pcf8574
@@ -277,7 +288,7 @@ void setup()
   display.display();
   delay(2500);
 
-  Serial.println("setup end");
+  debugln("setup end");
 }
 
 void loop()
@@ -301,15 +312,13 @@ void loop()
     ledOff(LEDRT);
     ProgramMode = normal;
 
-#ifdef DEBUG
-    Serial.println("AP disconnect");
-#endif
+    debugln("AP disconnect");
   }
 
   // Read local sensors pressure and light every x seconds
   if (millis() - lreadTime > ulSensReadInterval)
   {
-    Serial.println("Readlocal");
+    debugln("Readlocal");
     // readLight();
     readAtmosphere();
     // formatTempExt();
@@ -334,26 +343,26 @@ void loop()
     }
     if (pcf857X.digitalRead(SW3) == HIGH)
     {
-     // SW3 pressed starts OTA to update firmware
+      // SW3 pressed starts OTA to update firmware
       if (ProgramMode != oTAActive)
       {
-        //not yet running
+        // not yet running
         ledOn(LEDGN);
         startOTA();
         ledOff(LEDRT);
       }
-      else if(bOTARunning == false)
+      else if (bOTARunning == false)
       {
-         //SW 3 pressed again stop update and reboot
-#ifdef DEBUG
-        Serial.println("OTA stopped");
-#endif
+        // SW 3 pressed again stop update and reboot
+
+        debugln("OTA stopped");
+
         ledOff(LEDRT);
         ESP.restart();
       }
     }
 
-    lreadTime = millis();
+    lswitchReadTime = millis();
   }
 
   // Update display every x seconds
@@ -371,7 +380,7 @@ void loop()
   // Every x seconds check sensor readings, if no reading count up and then do not display
   if ((millis() - lSensorValidTime > ulSensorValidIntervall))
   {
-    // Serial.println("Sensor count up");
+    // debugln("Sensor count up");
     sSensor1.iSensorCnt++;
     sSensor2.iSensorCnt++;
     sSensor3.iSensorCnt++;
@@ -390,10 +399,9 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   // TODO check values and send further only if correct
   // iSensorChannel = sESPReceive.iSensorChannel;
-#ifdef DEBUG
-  Serial.print("Channel: ");
-  Serial.println(sESPReceive.iSensorChannel);
-#endif
+
+  debug("Channel: ");
+  debugln(sESPReceive.iSensorChannel);
 
   // depending on channel
   switch (sESPReceive.iSensorChannel)
@@ -405,40 +413,39 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor1.bSensorRec = true;
     sSensor1.iSensorCnt = 0;
 
-#ifdef DEBUG
-    Serial.print("Temperatur 1A: ");
-    Serial.println(sSensor1.fTempA);
-    Serial.print("extHumidity: ");
-    Serial.println(sSensor1.fHumi);
-    Serial.print("Batt1 V: ");
-    Serial.println(sSensor1.fVolt);
-#endif
+    debug("Temperatur 1A: ");
+    debugln(sSensor1.fTempA);
+    debug("extHumidity: ");
+    debugln(sSensor1.fHumi);
+    debug("Batt1 V: ");
+    debugln(sSensor1.fVolt);
+
     break;
   case 2:
     sSensor2.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
     sSensor2.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR2) * 100) / 100;
     sSensor2.bSensorRec = true;
     sSensor2.iSensorCnt = 0;
-#ifdef DEBUG
-    Serial.println("Recieved Data 2");
-    Serial.print("Temperatur 2A: ");
-    Serial.println(sSensor2.fTempA);
-    Serial.print("Batt2 V: ");
-    Serial.println(sSensor2.fVolt);
-#endif
+
+    debugln("Recieved Data 2");
+    debug("Temperatur 2A: ");
+    debugln(sSensor2.fTempA);
+    debug("Batt2 V: ");
+    debugln(sSensor2.fVolt);
+
     break;
   case 3:
     sSensor3.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
     sSensor3.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR3) * 100) / 100;
     sSensor3.bSensorRec = true;
     sSensor3.iSensorCnt = 0;
-#ifdef DEBUG
-    Serial.println("Recieved Data 3");
-    Serial.print("Temperatur 3: ");
-    Serial.println(sSensor3.fTempA);
-    Serial.print("Batt3 V: ");
-    Serial.println(sSensor3.fVolt);
-#endif
+
+    debugln("Recieved Data 3");
+    debug("Temperatur 3: ");
+    debugln(sSensor3.fTempA);
+    debug("Batt3 V: ");
+    debugln(sSensor3.fVolt);
+
     break;
   case 4:
     sSensor4.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
@@ -446,15 +453,14 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor4.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor4.bSensorRec = true;
     sSensor4.iSensorCnt = 0;
-#ifdef DEBUG
-    Serial.println("Recieved Data 4");
-    Serial.print("Temperatur 4: ");
-    Serial.println(sSensor4.fTempA);
-    Serial.print("Batt4 V: ");
-    Serial.println(sSensor4.fVolt);
-    Serial.print("extHumidity: ");
-    Serial.println(sSensor4.fHumi);
-#endif
+
+    debugln("Recieved Data 4");
+    debug("Temperatur 4: ");
+    debugln(sSensor4.fTempA);
+    debug("Batt4 V: ");
+    debugln(sSensor4.fVolt);
+    debug("extHumidity: ");
+    debugln(sSensor4.fHumi);
 
     break;
   case 5:
@@ -463,19 +469,18 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor5.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor5.bSensorRec = true;
     sSensor5.iSensorCnt = 0;
-#ifdef DEBUG
-    Serial.println("Recieved Data 5");
-    Serial.print("Temperatur 5: ");
-    Serial.println(sSensor5.fTempA);
-    Serial.print("Batt5 V: ");
-    Serial.println(sSensor5.fVolt);
-    Serial.print("extHumidity: ");
-    Serial.println(sSensor5.fHumi);
-#endif
+
+    debugln("Recieved Data 5");
+    debug("Temperatur 5: ");
+    debugln(sSensor5.fTempA);
+    debug("Batt5 V: ");
+    debugln(sSensor5.fVolt);
+    debug("extHumidity: ");
+    debugln(sSensor5.fHumi);
 
     break;
   default:
-    Serial.println("Default Channel do nothing");
+    debugln("Default Channel do nothing");
     break;
   }
 };
@@ -498,15 +503,13 @@ void readAtmosphere()
   sSensor0.fAtmo = bmp.readPressure();
   sSensor0.fAtmo = sSensor0.fAtmo / 100;
 
-#ifdef DEBUG
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
-  Serial.print("Pressure = ");
-  Serial.print(sSensor0.fAtmo);
-  Serial.println(" Pascal");
-  Serial.print("BMP Temp = ");
-  Serial.println(bmpTemp);
-#endif
+  debug("Pressure = ");
+  debug(sSensor0.fAtmo);
+  debugln(" Pascal");
+  debug("BMP Temp = ");
+  debugln(bmpTemp);
 }
 
 // Open WIFI AP for sensors to ask for station MAC adress
@@ -515,8 +518,8 @@ void openWifiAP()
   WiFi.mode(WIFI_AP);
   WiFi.begin();
   WiFi.softAP(APSSID);
-  Serial.print("Start AP: ");
-  Serial.println(APSSID);
+  debug("Start AP: ");
+  debugln(APSSID);
   ProgramMode = aPopen;
   sSecondsUntilClose = ulAPOpenInterval / 1000UL;
   lAPOpenTime = millis();
@@ -527,18 +530,18 @@ void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
   WiFi.hostname(MYHOSTNAME);
-#ifdef DEBUG
-  Serial.println("WifiStat connecting to ");
-  Serial.println(WIFI_SSID);
-#endif
+
+  debugln("WifiStat connecting to ");
+  debugln(WIFI_SSID);
+
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(250);
-    Serial.print(".");
+    debug(".");
   }
 
-  Serial.println();
+  debugln();
 }
 
 void updateDisplay()
@@ -570,25 +573,24 @@ void startOTA()
   // Disconnect Wifi and connect to local WLAN
   // OTA Setup PWD comes from HomeAutomationSecrets.h outside repository
 
-#ifdef DEBUG
-  Serial.println("StartOTA");
-  Serial.println("AP disconnect");
-#endif
+  debugln("StartOTA");
+  debugln("AP disconnect");
+
   WiFi.softAPdisconnect();
   ledOff(LEDRT);
   ProgramMode = oTAActive;
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
   WiFi.hostname(MYHOSTNAME);
-#ifdef DEBUG
-  Serial.println("WifiStat connecting to ");
-  Serial.println(WIFI_SSID);
-#endif
+
+  debugln("WifiStat connecting to ");
+  debugln(WIFI_SSID);
+
   WiFi.begin(WIFI_SSID, WIFI_PWD);
-   while (WiFi.status() != WL_CONNECTED)
+  while (WiFi.status() != WL_CONNECTED)
   {
     delay(250);
-    Serial.print(".");
+    debug(".");
     /*lcd.print(".");
     iCount++;
     if (iCount > 16)
@@ -600,7 +602,7 @@ void startOTA()
     }
     */
   }
-  Serial.print("connected to WLAN");
+  debug("connected to WLAN");
   display.drawString(0, 15, "OTA Init");
   ArduinoOTA.setHostname(MYHOSTNAME);
   ArduinoOTA.setPassword(OTA_PWD);
