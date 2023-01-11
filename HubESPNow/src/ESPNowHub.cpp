@@ -24,10 +24,13 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230107  V0.14:  Show OTA Info in display, End OTA if not already started
 20230108  V0.15:  cError in readtime for sensor BMP
 20230109  V0.16:  +Debug Macros
+20230110  V0.16:  +Print MAC adress when sensor data received
+20230111  V0.17:  +Draw temp sens5 on displaz
 
  */
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+//1 means debug on 0 means off
 #define DEBUG 1
 #include <ArduinoJson.h>
 #include <SoftwareSerial.h>
@@ -54,7 +57,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.16";
+const String sSoftware = "HubESPNow V0.17";
 
 // debug macro
 #if DEBUG == 1
@@ -82,6 +85,12 @@ struct DATEN_STRUKTUR
   float fESPNowHumi = -99;
   float fESPNowVolt = -99; // Batterie Sensor
 };
+
+// Default display if any value becomes invalid. Invalid when for some time no value received
+String textSens1Temp = "----------";
+String textSens2Temp = "----------";
+String textSens3Temp = "----------";
+String textSens5Temp = "----------";
 
 // Timing seconds for various uses
 long lSecondsTime = 0;
@@ -167,6 +176,8 @@ void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 void openWifiAP();
 void updateDisplay();
+void drawSens5Temp();
+void formatTempExt();
 void startOTA();
 
 /***************************
@@ -184,6 +195,8 @@ int ledNr = 0;
 
 void setup()
 {
+  //TODO remove or make better
+ int iEspNowErr = 0;
   Serial.begin(115200);
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -204,10 +217,13 @@ void setup()
 
   // ESP Role  1=Master, 2 = Slave 3 = Master + Slave
   debugln("Set espnow Role 2");
-  esp_now_set_self_role(2);
+  if (esp_now_set_self_role(2) != 0){
+    debugln("ESP-NOw set role failed");
+     };
 
   // callback for received ESP NOW messages
-  esp_now_register_recv_cb(on_receive_data);
+  iEspNowErr = esp_now_register_recv_cb(on_receive_data);
+  debugln(iEspNowErr);
 
   // OTA handler
   ArduinoOTA.onStart([]()
@@ -321,7 +337,7 @@ void loop()
     debugln("Readlocal");
     // readLight();
     readAtmosphere();
-    // formatTempExt();
+    formatTempExt();
 
     lreadTime = millis();
   }
@@ -399,7 +415,8 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   // TODO check values and send further only if correct
   // iSensorChannel = sESPReceive.iSensorChannel;
-
+  Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5] );
+debugln("");
   debug("Channel: ");
   debugln(sESPReceive.iSensorChannel);
 
@@ -544,6 +561,68 @@ void wifiConnectStation()
   debugln();
 }
 
+// Als subfunktion damit es nicht so oft aufgerufen wird
+// In String umwandeln damit die Ausgabe schneller geht
+// Loc sensor has no recieve timeout of course
+void formatTempExt()
+{
+  //Empfang Sensor 1
+  if (sSensor1.iSensorCnt > SensValidMax)
+  {
+    //kein Sensor gefunden
+    //   Serial.println("kein Sensor empfangen");
+    textSens1Temp = "----------";
+  }
+  else
+  {
+    textSens1Temp = String(sSensor1.fTempA) + " °C";
+  }
+  //Empfang Sensor 2 blau/braun
+  if (sSensor2.iSensorCnt > SensValidMax)
+  {
+    //kein Sensor gefunden
+    //   Serial.println("kein Sensor empfangen");
+    textSens2Temp = "----------";
+  }
+  else
+  {
+    textSens2Temp = String(sSensor2.fTempA) + " °C";
+  }
+  //Empfang Sensor 3
+  if (sSensor3.iSensorCnt > SensValidMax)
+  {
+    //kein Sensor gefunden
+    //   Serial.println("kein Sensor empfangen");
+    textSens3Temp = "----------";
+  }
+  else
+  {
+    textSens3Temp = String(sSensor3.fTempA) + " °C";
+  }
+    //Empfang Sensor 5
+  if (sSensor5.iSensorCnt > SensValidMax)
+  {
+    //kein Sensor gefunden
+    //   Serial.println("kein Sensor empfangen");
+    textSens5Temp = "----------";
+  }
+  else
+  {
+    textSens5Temp = String(sSensor5.fTempA) + " °C";
+  }
+}
+
+void drawSens5Temp()
+{
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 38, "Arbeitszimmer");
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(25,5, textSens5Temp);
+}
+
+
 void updateDisplay()
 {
   // clear the display
@@ -562,11 +641,15 @@ void updateDisplay()
   {
     display.setFont(ArialMT_Plain_16);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, 0, "OTA Update");
+    display.drawString(0, 0, "Wait for OTA");
+  }
+  if (ProgramMode == normal){
+    drawSens5Temp();
   }
   // write the buffer to the display
   display.display();
 }
+
 
 void startOTA()
 {
@@ -608,3 +691,4 @@ void startOTA()
   ArduinoOTA.setPassword(OTA_PWD);
   ArduinoOTA.begin();
 }
+
