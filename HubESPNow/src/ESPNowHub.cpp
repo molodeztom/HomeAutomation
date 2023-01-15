@@ -25,12 +25,13 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230108  V0.15:  cError in readtime for sensor BMP
 20230109  V0.16:  +Debug Macros
 20230110  V0.16:  +Print MAC adress when sensor data received
-20230111  V0.17:  +Draw temp sens5 on displaz
+20230111  V0.17:  +Draw temp sens5 on display
+20230115  V0.18:  cSW1-4 align with PCB description, SW1 now OTA, SW2 New sensor
 
  */
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-//1 means debug on 0 means off
+// 1 means debug on 0 means off
 #define DEBUG 1
 #include <ArduinoJson.h>
 #include <SoftwareSerial.h>
@@ -57,7 +58,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
 
-const String sSoftware = "HubESPNow V0.17";
+const String sSoftware = "HubESPNow V0.18";
 
 // debug macro
 #if DEBUG == 1
@@ -145,10 +146,10 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define LEDGN P5
 #define LEDBL P7
 #define LEDRT P4
-#define SW4 P0
-#define SW3 P1
-#define SW2 P2
-#define SW1 P3
+#define SW1 P0
+#define SW2 P1
+#define SW3 P2
+#define SW4 P3
 
 long lswitchReadTime = 0;                                // Timing
 const unsigned long ulSwitchReadInterval = 0.3 * 1000UL; // Time until switch is read next time in s
@@ -195,8 +196,8 @@ int ledNr = 0;
 
 void setup()
 {
-  //TODO remove or make better
- int iEspNowErr = 0;
+  // TODO remove or make better
+  int iEspNowErr = 0;
   Serial.begin(115200);
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -217,9 +218,10 @@ void setup()
 
   // ESP Role  1=Master, 2 = Slave 3 = Master + Slave
   debugln("Set espnow Role 2");
-  if (esp_now_set_self_role(2) != 0){
+  if (esp_now_set_self_role(2) != 0)
+  {
     debugln("ESP-NOw set role failed");
-     };
+  };
 
   // callback for received ESP NOW messages
   iEspNowErr = esp_now_register_recv_cb(on_receive_data);
@@ -325,7 +327,7 @@ void loop()
   if ((millis() - lAPOpenTime > ulAPOpenInterval) && ProgramMode == aPopen)
   {
     WiFi.softAPdisconnect();
-    ledOff(LEDRT);
+    ledOff(LEDGN);
     ProgramMode = normal;
 
     debugln("AP disconnect");
@@ -345,35 +347,35 @@ void loop()
   // Read input switches every x seconds
   if (millis() - lswitchReadTime > ulSwitchReadInterval)
   {
-    if (pcf857X.digitalRead(SW4) == HIGH)
+    if (pcf857X.digitalRead(SW2) == HIGH)
     {
-      // SW4 pressed starts AP to add more sensors
+      // SW2 pressed starts AP to add more sensors
       //  TODO make better
       // only in normal mode e.g. do not activate while in OTA
       if (ProgramMode == normal)
       {
 
-        ledOn(LEDRT);
+        ledOn(LEDGN);
         openWifiAP();
       }
     }
-    if (pcf857X.digitalRead(SW3) == HIGH)
+    if (pcf857X.digitalRead(SW1) == HIGH)
     {
-      // SW3 pressed starts OTA to update firmware
+      // SW1 pressed starts OTA to update firmware
       if (ProgramMode != oTAActive)
       {
         // not yet running
-        ledOn(LEDGN);
+        ledOn(LEDRT);
         startOTA();
-        ledOff(LEDRT);
+        ledOff(LEDGN);
       }
       else if (bOTARunning == false)
       {
-        // SW 3 pressed again stop update and reboot
+        // SW 1 pressed again stop update and reboot
 
         debugln("OTA stopped");
 
-        ledOff(LEDRT);
+        ledOff(LEDGN);
         ESP.restart();
       }
     }
@@ -414,11 +416,16 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   // copy received data to struct, to get access via variables
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   // TODO check values and send further only if correct
-  // iSensorChannel = sESPReceive.iSensorChannel;
-  Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0],mac[1],mac[2],mac[3],mac[4],mac[5] );
-debugln("");
+  Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  debugln("");
   debug("Channel: ");
   debugln(sESPReceive.iSensorChannel);
+  if (ProgramMode == aPopen)
+  {
+    // TODO display which new sensor connected with channel and MAC
+    // needs to remember which channels are already connecte
+    // may do this when changed to dynamic sensor array
+  }
 
   // depending on channel
   switch (sESPReceive.iSensorChannel)
@@ -566,44 +573,44 @@ void wifiConnectStation()
 // Loc sensor has no recieve timeout of course
 void formatTempExt()
 {
-  //Empfang Sensor 1
+  // Empfang Sensor 1
   if (sSensor1.iSensorCnt > SensValidMax)
   {
-    //kein Sensor gefunden
-    //   Serial.println("kein Sensor empfangen");
+    // kein Sensor gefunden
+    //    Serial.println("kein Sensor empfangen");
     textSens1Temp = "----------";
   }
   else
   {
     textSens1Temp = String(sSensor1.fTempA) + " °C";
   }
-  //Empfang Sensor 2 blau/braun
+  // Empfang Sensor 2 blau/braun
   if (sSensor2.iSensorCnt > SensValidMax)
   {
-    //kein Sensor gefunden
-    //   Serial.println("kein Sensor empfangen");
+    // kein Sensor gefunden
+    //    Serial.println("kein Sensor empfangen");
     textSens2Temp = "----------";
   }
   else
   {
     textSens2Temp = String(sSensor2.fTempA) + " °C";
   }
-  //Empfang Sensor 3
+  // Empfang Sensor 3
   if (sSensor3.iSensorCnt > SensValidMax)
   {
-    //kein Sensor gefunden
-    //   Serial.println("kein Sensor empfangen");
+    // kein Sensor gefunden
+    //    Serial.println("kein Sensor empfangen");
     textSens3Temp = "----------";
   }
   else
   {
     textSens3Temp = String(sSensor3.fTempA) + " °C";
   }
-    //Empfang Sensor 5
+  // Empfang Sensor 5
   if (sSensor5.iSensorCnt > SensValidMax)
   {
-    //kein Sensor gefunden
-    //   Serial.println("kein Sensor empfangen");
+    // kein Sensor gefunden
+    //    Serial.println("kein Sensor empfangen");
     textSens5Temp = "----------";
   }
   else
@@ -619,9 +626,8 @@ void drawSens5Temp()
   display.drawString(61, 38, "Arbeitszimmer");
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(25,5, textSens5Temp);
+  display.drawString(25, 5, textSens5Temp);
 }
-
 
 void updateDisplay()
 {
@@ -643,13 +649,13 @@ void updateDisplay()
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.drawString(0, 0, "Wait for OTA");
   }
-  if (ProgramMode == normal){
+  if (ProgramMode == normal)
+  {
     drawSens5Temp();
   }
   // write the buffer to the display
   display.display();
 }
-
 
 void startOTA()
 {
@@ -660,7 +666,7 @@ void startOTA()
   debugln("AP disconnect");
 
   WiFi.softAPdisconnect();
-  ledOff(LEDRT);
+  ledOff(LEDGN);
   ProgramMode = oTAActive;
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
@@ -691,4 +697,3 @@ void startOTA()
   ArduinoOTA.setPassword(OTA_PWD);
   ArduinoOTA.begin();
 }
-
