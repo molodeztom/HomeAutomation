@@ -28,6 +28,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230111  V0.17:  +Draw temp sens5 on display
 20230115  V0.18:  cSW1-4 align with PCB description, SW1 now OTA, SW2 New sensor
 20230115  V0.19:  cUse sensor array instead of designated variables
+20230115  V0.20:  +Debug macro using macros
 
  */
 #include <Arduino.h>
@@ -39,7 +40,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
 // Include the UI lib TODO try the ui LIB
-// #include "OLEDDisplayUi.h"
+//#include "OLEDDisplayUi.h"
 #include "images.h"
 #include <ArduinoOTA.h>
 
@@ -66,9 +67,18 @@ SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h star
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
 #define debugln(x) Serial.println(x)
+#define debugv(s, v)    \
+  {                     \
+    Serial.print(F(s)); \
+    Serial.println(v);    \
+  }
+
+
 #else
 #define debug(x)
 #define debugln(x)
+#define debugv(format, ...)
+#define debugarg(...)
 #endif
 
 // used to correct small deviances in sensor reading sensor 0 is local sensor  0.xyz  x=Volt y=0.1Volt z=0.01V3,
@@ -220,7 +230,7 @@ void setup()
 
   // callback for received ESP NOW messages
   iEspNowErr = esp_now_register_recv_cb(on_receive_data);
-  debugln(iEspNowErr);
+  debugv("RegisterESP returned", iEspNowErr);
 
   // OTA handler
   ArduinoOTA.onStart([]()
@@ -250,13 +260,12 @@ void setup()
                           
                           display.clear();
                     display.drawString(0, 10, "OTA Update");
-                    display.drawProgressBar(0,40,100,20,(progress / (total / 100)));
+                    display.drawProgressBar(0,10,100,20,(progress / (total / 100)));
 
                         //   snprintf(sTemp,20,"Progress: %u%%\r", (progress / (total / 100)));
                           // display.drawString(0, 40,sTemp);
                     // write the buffer to the display
-                    display.display();
-                          Serial.printf("Progress: %u%%\r", (progress / (total / 100))); });
+                    display.display(); });
 
   // initialize Atmosphere sensor
   if (!bmp.begin())
@@ -437,11 +446,11 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     sSensor[iChannelNr].bSensorRec = true;
-    iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; //remember for display
+    iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; // remember for display
     sSensor[iChannelNr].iSecSinceLastRead = 0;
     debugln("Received Data");
-    // TODO check values and send further only if correct
-    Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    // Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
     debugln("");
     debug("Channel Nr.:");
     debugln(iChannelNr);
@@ -453,8 +462,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debugln(sSensor[iChannelNr].fVolt);
     debug(iLastSSinceLastRead);
     debugln(" min since last read ");
-   }
-  
+  }
 };
 
 // function LED on off
@@ -527,7 +535,7 @@ void formatTempExt()
     if (sSensor[n].iSecSinceLastRead > SensValidMax)
     {
       // kein Sensor gefunden
-      //    Serial.println("kein Sensor empfangen");
+      debugln("no sensor data received");
       textSensTemp[n] = "----------";
     }
     else
