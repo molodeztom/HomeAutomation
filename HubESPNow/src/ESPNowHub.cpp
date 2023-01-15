@@ -27,6 +27,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230110  V0.16:  +Print MAC adress when sensor data received
 20230111  V0.17:  +Draw temp sens5 on display
 20230115  V0.18:  cSW1-4 align with PCB description, SW1 now OTA, SW2 New sensor
+20230115  V0.19:  cUse sensor array instead of designated variables
 
  */
 #include <Arduino.h>
@@ -57,8 +58,9 @@ extern "C"
 
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
-
-const String sSoftware = "HubESPNow V0.18";
+const String sSoftware = "HubESPNow V0.19";
+// TODO here we start with a sensor array instead of designated sensor0-x variables
+SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
 // debug macro
 #if DEBUG == 1
@@ -69,13 +71,9 @@ const String sSoftware = "HubESPNow V0.18";
 #define debugln(x)
 #endif
 
-// used to correct small deviances in sensor reading  0.xyz  x=Volt y=0.1Volt z=0.01V3
-#define BATTCORR1 -0.099
-#define BATTCORR2 -0.018
-#define BATTCORR3 -0.018
-#define BATTCORR4 -0.018
-#define BATTCORR5 -0.21
-#define SENSCORR1A -0.25
+// used to correct small deviances in sensor reading sensor 0 is local sensor  0.xyz  x=Volt y=0.1Volt z=0.01V3,
+const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
+const float fTempCorr[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // struct for exchanging data over ESP NOW
 struct DATEN_STRUKTUR
@@ -88,10 +86,7 @@ struct DATEN_STRUKTUR
 };
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
-String textSens1Temp = "----------";
-String textSens2Temp = "----------";
-String textSens3Temp = "----------";
-String textSens5Temp = "----------";
+String textSensTemp[nMaxSensors];
 
 // Timing seconds for various uses
 long lSecondsTime = 0;
@@ -295,6 +290,12 @@ void setup()
   ledOff(LEDGB);
   ledOff(LEDBL);
 
+  // initialize display text to no value
+  for (int n = 0; n < nMaxSensors; n++)
+  {
+    textSensTemp[n] = "----------";
+  }
+
   // initialize display
   display.init();
   // display.displayOn();
@@ -304,6 +305,7 @@ void setup()
   // display.setContrast(255);
   display.drawString(2, 10, sSoftware);
   display.display();
+
   delay(2500);
 
   debugln("setup end");
@@ -333,7 +335,7 @@ void loop()
     debugln("AP disconnect");
   }
 
-  // Read local sensors pressure and light every x seconds
+  // Read local sensors pressure and light, update ext sensor display text every x seconds
   if (millis() - lreadTime > ulSensReadInterval)
   {
     debugln("Readlocal");
@@ -395,15 +397,14 @@ void loop()
     lsUpdateDisplay = millis();
   }
 
-  // Every x seconds check sensor readings, if no reading count up and then do not display
+  // Every second check sensor readings, if no reading count up and then do not display
   if ((millis() - lSensorValidTime > ulSensorValidIntervall))
   {
-    // debugln("Sensor count up");
-    sSensor1.iSensorCnt++;
-    sSensor2.iSensorCnt++;
-    sSensor3.iSensorCnt++;
-    // sSensor4.iSensorCnt++;
-    sSensor5.iSensorCnt++;
+    //
+    for (int n = 0; n < nMaxSensors; n++)
+    {
+      sSensor[n].iSecSinceLastRead++;
+    }
     lSensorValidTime = millis();
   }
 }
@@ -413,13 +414,14 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 {
 
   DATEN_STRUKTUR sESPReceive;
+  int iChannelNr;
+  int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
-  // TODO check values and send further only if correct
-  Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  debugln("");
-  debug("Channel: ");
-  debugln(sESPReceive.iSensorChannel);
+ 
+ 
+  iChannelNr = sESPReceive.iSensorChannel;
+
   if (ProgramMode == aPopen)
   {
     // TODO display which new sensor connected with channel and MAC
@@ -427,86 +429,32 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     // may do this when changed to dynamic sensor array
   }
 
-  // depending on channel
-  switch (sESPReceive.iSensorChannel)
+  // depending on channel fill values 0 is local sensor and not used here
+  // new use array
+  if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
-  case 1:
-    sSensor1.fTempA = roundf((sESPReceive.fESPNowTempA + SENSCORR1A) * 100) / 100;
-    sSensor1.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
-    sSensor1.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR1) * 100) / 100;
-    sSensor1.bSensorRec = true;
-    sSensor1.iSensorCnt = 0;
-
-    debug("Temperatur 1A: ");
-    debugln(sSensor1.fTempA);
-    debug("extHumidity: ");
-    debugln(sSensor1.fHumi);
-    debug("Batt1 V: ");
-    debugln(sSensor1.fVolt);
-
-    break;
-  case 2:
-    sSensor2.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
-    sSensor2.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR2) * 100) / 100;
-    sSensor2.bSensorRec = true;
-    sSensor2.iSensorCnt = 0;
-
-    debugln("Recieved Data 2");
-    debug("Temperatur 2A: ");
-    debugln(sSensor2.fTempA);
-    debug("Batt2 V: ");
-    debugln(sSensor2.fVolt);
-
-    break;
-  case 3:
-    sSensor3.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
-    sSensor3.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR3) * 100) / 100;
-    sSensor3.bSensorRec = true;
-    sSensor3.iSensorCnt = 0;
-
-    debugln("Recieved Data 3");
-    debug("Temperatur 3: ");
-    debugln(sSensor3.fTempA);
-    debug("Batt3 V: ");
-    debugln(sSensor3.fVolt);
-
-    break;
-  case 4:
-    sSensor4.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
-    sSensor4.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR4) * 100) / 100;
-    sSensor4.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
-    sSensor4.bSensorRec = true;
-    sSensor4.iSensorCnt = 0;
-
-    debugln("Recieved Data 4");
-    debug("Temperatur 4: ");
-    debugln(sSensor4.fTempA);
-    debug("Batt4 V: ");
-    debugln(sSensor4.fVolt);
-    debug("extHumidity: ");
-    debugln(sSensor4.fHumi);
-
-    break;
-  case 5:
-    sSensor5.fTempA = roundf(sESPReceive.fESPNowTempA * 100) / 100;
-    sSensor5.fVolt = roundf((sESPReceive.fESPNowVolt + BATTCORR5) * 100) / 100;
-    sSensor5.fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
-    sSensor5.bSensorRec = true;
-    sSensor5.iSensorCnt = 0;
-
-    debugln("Recieved Data 5");
-    debug("Temperatur 5: ");
-    debugln(sSensor5.fTempA);
-    debug("Batt5 V: ");
-    debugln(sSensor5.fVolt);
-    debug("extHumidity: ");
-    debugln(sSensor5.fHumi);
-
-    break;
-  default:
-    debugln("Default Channel do nothing");
-    break;
-  }
+    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
+    sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
+    sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
+    sSensor[iChannelNr].bSensorRec = true;
+    iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; //remember for display
+    sSensor[iChannelNr].iSecSinceLastRead = 0;
+    debugln("Received Data");
+    // TODO check values and send further only if correct
+    Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    debugln("");
+    debug("Channel Nr.:");
+    debugln(iChannelNr);
+    debug("Temperature A: ");
+    debugln(sSensor[iChannelNr].fTempA);
+    debug("Humidity: ");
+    debugln(sSensor[iChannelNr].fHumi);
+    debug("Batt V: ");
+    debugln(sSensor[iChannelNr].fVolt);
+    debug(iLastSSinceLastRead);
+    debugln(" min since last read ");
+   }
+  
 };
 
 // function LED on off
@@ -524,13 +472,13 @@ void ledOff(uint8_t LedNr)
 void readAtmosphere()
 {
 
-  sSensor0.fAtmo = bmp.readPressure();
-  sSensor0.fAtmo = sSensor0.fAtmo / 100;
+  sSensor[0].fAtmo = bmp.readPressure();
+  sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
 
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
   debug("Pressure = ");
-  debug(sSensor0.fAtmo);
+  debug(sSensor[0].fAtmo);
   debugln(" Pascal");
   debug("BMP Temp = ");
   debugln(bmpTemp);
@@ -573,50 +521,21 @@ void wifiConnectStation()
 // Loc sensor has no recieve timeout of course
 void formatTempExt()
 {
-  // Empfang Sensor 1
-  if (sSensor1.iSensorCnt > SensValidMax)
+  // if sensor not updated within time SensValidMax is reached and no value displayed
+  for (int n = 0; n < nMaxSensors; n++)
   {
-    // kein Sensor gefunden
-    //    Serial.println("kein Sensor empfangen");
-    textSens1Temp = "----------";
+    if (sSensor[n].iSecSinceLastRead > SensValidMax)
+    {
+      // kein Sensor gefunden
+      //    Serial.println("kein Sensor empfangen");
+      textSensTemp[n] = "----------";
+    }
+    else
+    {
+      textSensTemp[n] = String(sSensor[n].fTempA) + " °C";
+    }
   }
-  else
-  {
-    textSens1Temp = String(sSensor1.fTempA) + " °C";
-  }
-  // Empfang Sensor 2 blau/braun
-  if (sSensor2.iSensorCnt > SensValidMax)
-  {
-    // kein Sensor gefunden
-    //    Serial.println("kein Sensor empfangen");
-    textSens2Temp = "----------";
-  }
-  else
-  {
-    textSens2Temp = String(sSensor2.fTempA) + " °C";
-  }
-  // Empfang Sensor 3
-  if (sSensor3.iSensorCnt > SensValidMax)
-  {
-    // kein Sensor gefunden
-    //    Serial.println("kein Sensor empfangen");
-    textSens3Temp = "----------";
-  }
-  else
-  {
-    textSens3Temp = String(sSensor3.fTempA) + " °C";
-  }
-  // Empfang Sensor 5
-  if (sSensor5.iSensorCnt > SensValidMax)
-  {
-    // kein Sensor gefunden
-    //    Serial.println("kein Sensor empfangen");
-    textSens5Temp = "----------";
-  }
-  else
-  {
-    textSens5Temp = String(sSensor5.fTempA) + " °C";
-  }
+ 
 }
 
 void drawSens5Temp()
@@ -626,7 +545,7 @@ void drawSens5Temp()
   display.drawString(61, 38, "Arbeitszimmer");
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(25, 5, textSens5Temp);
+  display.drawString(25, 5, textSensTemp[5]);
 }
 
 void updateDisplay()
