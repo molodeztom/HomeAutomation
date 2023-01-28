@@ -29,6 +29,8 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230115  V0.18:  cSW1-4 align with PCB description, SW1 now OTA, SW2 New sensor
 20230115  V0.19:  cUse sensor array instead of designated variables
 20230115  V0.20:  +Debug macro using macros
+20230115  V0.21:  +Disable AP on SW2 second press
+20230128  V0.22:  +Display information when sensor connects first time
 
  */
 #include <Arduino.h>
@@ -40,7 +42,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
 // Include the UI lib TODO try the ui LIB
-//#include "OLEDDisplayUi.h"
+// #include "OLEDDisplayUi.h"
 #include "images.h"
 #include <ArduinoOTA.h>
 
@@ -59,8 +61,8 @@ extern "C"
 
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
-const String sSoftware = "HubESPNow V0.19";
-// TODO here we start with a sensor array instead of designated sensor0-x variables
+const String sSoftware = "HubESPNow V0.22";
+
 SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
 // debug macro
@@ -70,9 +72,8 @@ SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h star
 #define debugv(s, v)    \
   {                     \
     Serial.print(F(s)); \
-    Serial.println(v);    \
+    Serial.println(v);  \
   }
-
 
 #else
 #define debug(x)
@@ -97,10 +98,14 @@ struct DATEN_STRUKTUR
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
 String textSensTemp[nMaxSensors];
+String sNewSensorChannel;
+String sNewSensorMAC;
+bool bNewSensorFound = false;
 
+int iLastReceivedChannel = 0;
 // Timing seconds for various uses
 long lSecondsTime = 0;
-const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec
+const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 
 // program is running on one of these modes
 // normal, AP Open to add a new sensor, OTA only active to do an OTA
@@ -120,7 +125,7 @@ bool bOTARunning = false; // true if OTA already running to prevent stop
 long lAPOpenTime = 0;       // Timing
 int sSecondsUntilClose = 0; // counter to display how long still open
 // TODO: set back to 240 sec
-const unsigned long ulAPOpenInterval = 60 * 1000UL; // time in sec
+const unsigned long ulAPOpenInterval = 90 * 1000UL; // time in sec TIMER
 
 // ESP Now
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
@@ -157,14 +162,12 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define SW4 P3
 
 long lswitchReadTime = 0;                                // Timing
-const unsigned long ulSwitchReadInterval = 0.3 * 1000UL; // Time until switch is read next time in s
+const unsigned long ulSwitchReadInterval = 0.3 * 1000UL; // Time until switch is read next time in s TIMER
 
 /***************************
  * Display Settings
  **************************/
-
 const int I2C_DISPLAY_ADDRESS = 0x3c;
-
 const int SDA_PIN = D2;
 const int SCL_PIN = D1;
 // const int SDA_PIN = D3; //GPIO0
@@ -173,11 +176,9 @@ const int SCL_PIN = D1;
 // Initialize the oled display for address 0x3c
 SSD1306Wire display(0x3c, SDA_PIN, SCL_PIN);
 long lsUpdateDisplay = 0;                                   // Timing
-const unsigned long ulUpdateDisplayInterval = 0.3 * 1000UL; // Time until display is updated next time in s
+const unsigned long ulUpdateDisplayInterval = 0.3 * 1000UL; // Time until display is updated next time in s TIMER
 
 // Forward declarations
-// flag changed in the ticker function every 10 minutes
-
 void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 void openWifiAP();
@@ -185,6 +186,8 @@ void updateDisplay();
 void drawSens5Temp();
 void formatTempExt();
 void startOTA();
+void formatNewSensorData();
+void macAddrToString(byte *mac, char *str);
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -195,14 +198,14 @@ Adafruit_BMP085 bmp;
 // const int Light_ADDR = 0b0100011;                      // address:0x23
 // const int Atom_ADDR = 0b1110111;                       // address:0x77
 long lreadTime = 0;
-const unsigned long ulSensReadInterval = 70 * 1000UL; // Timing Time to evaluate received sens values for display
+const unsigned long ulSensReadInterval = 60 * 1000UL; // Timing Time to evaluate received sens values for display in s TIMER
 
 int ledNr = 0;
 
 void setup()
 {
-  // TODO remove or make better
   int iEspNowErr = 0;
+
   Serial.begin(115200);
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -230,7 +233,7 @@ void setup()
 
   // callback for received ESP NOW messages
   iEspNowErr = esp_now_register_recv_cb(on_receive_data);
-  debugv("RegisterESP returned", iEspNowErr);
+  debugv("RegisterESP returned ", iEspNowErr);
 
   // OTA handler
   ArduinoOTA.onStart([]()
@@ -260,7 +263,7 @@ void setup()
                           
                           display.clear();
                     display.drawString(0, 10, "OTA Update");
-                    display.drawProgressBar(0,10,100,20,(progress / (total / 100)));
+                    display.drawProgressBar(0,40,100,20,(progress / (total / 100)));
 
                         //   snprintf(sTemp,20,"Progress: %u%%\r", (progress / (total / 100)));
                           // display.drawString(0, 40,sTemp);
@@ -276,6 +279,8 @@ void setup()
   {
     debugln("Found BMP180 or BMP085 sensor at 0x77");
   }
+  // local sensor always read
+  sSensor[0].bSensorRec = true;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -339,12 +344,13 @@ void loop()
   {
     WiFi.softAPdisconnect();
     ledOff(LEDGN);
+    bNewSensorFound = false;
     ProgramMode = normal;
 
     debugln("AP disconnect");
   }
 
-  // Read local sensors pressure and light, update ext sensor display text every x seconds
+  // Read local sensors pressure and light, update ext sensor display text every 60 seconds
   if (millis() - lreadTime > ulSensReadInterval)
   {
     debugln("Readlocal");
@@ -361,13 +367,19 @@ void loop()
     if (pcf857X.digitalRead(SW2) == HIGH)
     {
       // SW2 pressed starts AP to add more sensors
-      //  TODO make better
       // only in normal mode e.g. do not activate while in OTA
       if (ProgramMode == normal)
       {
 
         ledOn(LEDGN);
         openWifiAP();
+      }
+      else if (ProgramMode == aPopen)
+      {
+        // SW 2 pressed again close AP
+        WiFi.softAPdisconnect();
+        ledOff(LEDGN);
+        ProgramMode = normal;
       }
     }
     if (pcf857X.digitalRead(SW1) == HIGH)
@@ -383,9 +395,7 @@ void loop()
       else if (bOTARunning == false)
       {
         // SW 1 pressed again stop update and reboot
-
         debugln("OTA stopped");
-
         ledOff(LEDGN);
         ESP.restart();
       }
@@ -427,17 +437,8 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
- 
- 
   iChannelNr = sESPReceive.iSensorChannel;
-
-  if (ProgramMode == aPopen)
-  {
-    // TODO display which new sensor connected with channel and MAC
-    // needs to remember which channels are already connecte
-    // may do this when changed to dynamic sensor array
-  }
-
+  iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
   // depending on channel fill values 0 is local sensor and not used here
   // new use array
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
@@ -445,14 +446,23 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
-    sSensor[iChannelNr].bSensorRec = true;
     iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; // remember for display
     sSensor[iChannelNr].iSecSinceLastRead = 0;
-    debugln("Received Data");
-    // Serial.printf("Sensor mac: %02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    if (sSensor[iLastReceivedChannel].bSensorRec == false)
+    {
+      // do this only on very first packet of a sensor
+      char macAddr[18];
+      // copy mac address
+      macAddrToString(mac, macAddr);
+      sSensor[iChannelNr].iSensorChannel = iChannelNr;
+      sSensor[iChannelNr].sMacAddress = macAddr;
+      formatNewSensorData();
+    }
 
-    debugln("");
-    debug("Channel Nr.:");
+    debugln("Received Data");
+    debugln("MAC Adress: ");
+    debugln(sSensor[iChannelNr].sMacAddress);
+    debug("Channel nr.:");
     debugln(iChannelNr);
     debug("Temperature A: ");
     debugln(sSensor[iChannelNr].fTempA);
@@ -462,6 +472,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debugln(sSensor[iChannelNr].fVolt);
     debug(iLastSSinceLastRead);
     debugln(" min since last read ");
+    debugln();
   }
 };
 
@@ -535,7 +546,11 @@ void formatTempExt()
     if (sSensor[n].iSecSinceLastRead > SensValidMax)
     {
       // kein Sensor gefunden
-      debugln("no sensor data received");
+      debug("Sensor Nr.: ");
+      debug(n);
+      debug("channel: ");
+      debugln(sSensor[n].iSensorChannel);
+      debugln(" no sensor data received");
       textSensTemp[n] = "----------";
     }
     else
@@ -543,7 +558,6 @@ void formatTempExt()
       textSensTemp[n] = String(sSensor[n].fTempA) + " °C";
     }
   }
- 
 }
 
 void drawSens5Temp()
@@ -556,25 +570,53 @@ void drawSens5Temp()
   display.drawString(25, 5, textSensTemp[5]);
 }
 
+void formatNewSensorData()
+{
+  // When a sensor connects for the first time in AP mode draw data
+  // this is detected by bSensorRec which is initially false and set true on second read
+  // channel 0 is local sensor thus not displayed
+
+  // draw MAC adress and channel
+  debug("formatNewSensorData: ");
+  debugln(sSensor[iLastReceivedChannel].sMacAddress);
+  debug("Channel Nr.:");
+  debugln(sSensor[iLastReceivedChannel].iSensorChannel);
+  debugln();
+  sNewSensorChannel = String(sSensor[iLastReceivedChannel].iSensorChannel);
+  sNewSensorMAC = (sSensor[iLastReceivedChannel].sMacAddress);
+  sSensor[iLastReceivedChannel].bSensorRec = true; // set to read to not display multiple times
+  bNewSensorFound = true;
+}
+
 void updateDisplay()
 {
   // clear the display
-  display.clear(); // TODO do we need this
+  display.clear();
   display.setFont(ArialMT_Plain_10);
-  display.setTextAlignment(TEXT_ALIGN_RIGHT);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
   // test output millisec
   display.drawString(128, 54, String(millis()));
   // display flag for open AP
   if (ProgramMode == aPopen)
   {
-    display.drawString(115, 0, "AP:");
-    display.drawString(128, 0, String(sSecondsUntilClose));
+    display.drawString(0, 0, "AP remaining s: ");
+    display.drawString(80, 0, String(sSecondsUntilClose));
+    if (bNewSensorFound == true)
+    {
+      // display data of new sensor received
+      display.setFont(ArialMT_Plain_10);
+      display.drawString(0, 10, "New Sensor found");
+      display.drawString(0, 20, "Channel:");
+      display.drawString(50, 20, sNewSensorChannel);
+      display.drawString(0, 30, "MAC:");
+      display.drawString(30, 30, sNewSensorMAC);
+    }
   }
   if (ProgramMode == oTAActive)
   {
     display.setFont(ArialMT_Plain_16);
     display.setTextAlignment(TEXT_ALIGN_LEFT);
-    display.drawString(0, 0, "Wait for OTA");
+    display.drawString(0, 0, "Waiting for OTA");
   }
   if (ProgramMode == normal)
   {
@@ -607,20 +649,26 @@ void startOTA()
   {
     delay(250);
     debug(".");
-    /*lcd.print(".");
-    iCount++;
-    if (iCount > 16)
-    {
-      lcd.setCursor(0, 1);
-      lcd.print("                ");
-      lcd.setCursor(0, 1);
-      iCount = 0;
-    }
-    */
   }
   debug("connected to WLAN");
   display.drawString(0, 15, "OTA Init");
   ArduinoOTA.setHostname(MYHOSTNAME);
   ArduinoOTA.setPassword(OTA_PWD);
   ArduinoOTA.begin();
+}
+
+void macAddrToString(byte *mac, char *str)
+{
+  for (int i = 0; i < 6; i++)
+  {
+    byte digit;
+    digit = (*mac >> 8) & 0xF;
+    *str++ = (digit < 10 ? '0' : 'A' - 10) + digit;
+    digit = (*mac) & 0xF;
+    *str++ = (digit < 10 ? '0' : 'A' - 10) + digit;
+    *str++ = ':';
+    mac++;
+  }
+  // replace the final colon with a nul terminator
+  str[-1] = '\0';
 }

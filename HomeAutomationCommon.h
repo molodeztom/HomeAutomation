@@ -58,6 +58,7 @@ struct SENSOR_DATA
     float fHumi = InvalidMeasurement;
     float fVolt = InvalidMeasurement;
     float fAtmo = InvalidMeasurement;
+    String sMacAddress = "0000000000000000000";
     int iLight = 0;
     bool bSensorRec = false; //true when valid sensor data received in time frame
     //int iSensorCnt = 6;      //Counter for timeout no values after some time renamed
