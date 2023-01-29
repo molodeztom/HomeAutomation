@@ -1,8 +1,8 @@
 /*
 
 Hardware:
-ESPNowHub V1.0 und CTRL Board V1 mit externem OLED Display und div Sensoren
-Funktion:
+ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display and div sensors
+functions:
 Anzeige von div. Werten aus lokalen Sensoren auf OLED
 Empfang von externen Temperaturwerten über ESP-Now
 Versenden der Werte über WLAN an Thingspeak
@@ -31,6 +31,8 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230115  V0.20:  +Debug macro using macros
 20230115  V0.21:  +Disable AP on SW2 second press
 20230128  V0.22:  +Display information when sensor connects first time
+20230129  V0.23:  c clean up code check release compilation
+20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
 
  */
 #include <Arduino.h>
@@ -61,7 +63,7 @@ extern "C"
 
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
-const String sSoftware = "HubESPNow V0.22";
+const String sSoftware = "HubESPNow V0.23";
 
 SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -162,7 +164,7 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define SW4 P3
 
 long lswitchReadTime = 0;                                // Timing
-const unsigned long ulSwitchReadInterval = 0.3 * 1000UL; // Time until switch is read next time in s TIMER
+const unsigned long ulSwitchReadInterval = 0.4 * 1000UL; // Time until switch is read next time in s TIMER
 
 /***************************
  * Display Settings
@@ -204,8 +206,6 @@ int ledNr = 0;
 
 void setup()
 {
-  int iEspNowErr = 0;
-
   Serial.begin(115200);
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -232,8 +232,10 @@ void setup()
   };
 
   // callback for received ESP NOW messages
-  iEspNowErr = esp_now_register_recv_cb(on_receive_data);
-  debugv("RegisterESP returned ", iEspNowErr);
+  if (esp_now_register_recv_cb(on_receive_data) != 0)
+  {
+    debugln("ESP-NOW register failed");
+  }
 
   // OTA handler
   ArduinoOTA.onStart([]()
@@ -279,7 +281,7 @@ void setup()
   {
     debugln("Found BMP180 or BMP085 sensor at 0x77");
   }
-  // local sensor always read
+  // local sensor always read used for registration of new sensor
   sSensor[0].bSensorRec = true;
 
   // initialize pcf8574
@@ -298,7 +300,7 @@ void setup()
   ledOn(LEDGN);
   ledOn(LEDGB);
   ledOn(LEDBL);
-  delay(2000);
+  delay(1000);
   ledOff(LEDRT);
   ledOff(LEDGN);
   ledOff(LEDGB);
@@ -312,16 +314,11 @@ void setup()
 
   // initialize display
   display.init();
-  // display.displayOn();
   display.flipScreenVertically();
   display.setFont(ArialMT_Plain_10);
-  // display.setTextAlignment(TEXT_ALIGN_CENTER);
-  // display.setContrast(255);
   display.drawString(2, 10, sSoftware);
   display.display();
-
   delay(2500);
-
   debugln("setup end");
 }
 
@@ -346,7 +343,6 @@ void loop()
     ledOff(LEDGN);
     bNewSensorFound = false;
     ProgramMode = normal;
-
     debugln("AP disconnect");
   }
 
@@ -357,7 +353,6 @@ void loop()
     // readLight();
     readAtmosphere();
     formatTempExt();
-
     lreadTime = millis();
   }
 
@@ -370,7 +365,6 @@ void loop()
       // only in normal mode e.g. do not activate while in OTA
       if (ProgramMode == normal)
       {
-
         ledOn(LEDGN);
         openWifiAP();
       }
@@ -400,11 +394,10 @@ void loop()
         ESP.restart();
       }
     }
-
     lswitchReadTime = millis();
   }
 
-  // Update display every x seconds
+  // Update display every x seconds and handle OTA
   if (millis() - lsUpdateDisplay > ulUpdateDisplayInterval)
   {
     if (ProgramMode == oTAActive)
@@ -428,7 +421,7 @@ void loop()
   }
 }
 
-// Callback funktion wenn Daten über ESP-Now empfangen wurden
+// Callback funktion for receiving data over ESPNOW
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 {
 
@@ -439,8 +432,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   iChannelNr = sESPReceive.iSensorChannel;
   iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
-  // depending on channel fill values 0 is local sensor and not used here
-  // new use array
+  // depending on channel fill values. 0 is local sensor and not used here
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
     sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
@@ -451,6 +443,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     if (sSensor[iLastReceivedChannel].bSensorRec == false)
     {
       // do this only on very first packet of a sensor
+      // save MAC Address and channel number in array
       char macAddr[18];
       // copy mac address
       macAddrToString(mac, macAddr);
@@ -490,12 +483,12 @@ void ledOff(uint8_t LedNr)
 
 void readAtmosphere()
 {
-
   sSensor[0].fAtmo = bmp.readPressure();
   sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
-
+#if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
+#endif
   debug("Pressure = ");
   debug(sSensor[0].fAtmo);
   debugln(" Pascal");
@@ -503,7 +496,7 @@ void readAtmosphere()
   debugln(bmpTemp);
 }
 
-// Open WIFI AP for sensors to ask for station MAC adress
+// Open WIFI AP for external sensor registration (ask for station MAC adress)
 void openWifiAP()
 {
   WiFi.mode(WIFI_AP);
@@ -516,7 +509,7 @@ void openWifiAP()
   lAPOpenTime = millis();
 }
 
-// Connect to local WIFI
+// Connect to local WIFI to enable OTA
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
@@ -531,19 +524,20 @@ void wifiConnectStation()
     delay(250);
     debug(".");
   }
-
   debugln();
 }
 
-// Als subfunktion damit es nicht so oft aufgerufen wird
-// In String umwandeln damit die Ausgabe schneller geht
-// Loc sensor has no recieve timeout of course
+/* not called in recv data to avoid delay 
+called every x seconds to update values for all nMaxSensors
+create string for display output 
+Local sensor has no recieve timeout */
 void formatTempExt()
 {
   // if sensor not updated within time SensValidMax is reached and no value displayed
+  // and sensor has a valid first reading
   for (int n = 0; n < nMaxSensors; n++)
   {
-    if (sSensor[n].iSecSinceLastRead > SensValidMax)
+    if ((sSensor[n].iSecSinceLastRead > SensValidMax) && (sSensor[n].bSensorRec == true))
     {
       // kein Sensor gefunden
       debug("Sensor Nr.: ");
@@ -572,11 +566,10 @@ void drawSens5Temp()
 
 void formatNewSensorData()
 {
-  // When a sensor connects for the first time in AP mode draw data
+  // When a sensor connects for the first time in AP mode output data
   // this is detected by bSensorRec which is initially false and set true on second read
   // channel 0 is local sensor thus not displayed
-
-  // draw MAC adress and channel
+  // output MAC adress and channel
   debug("formatNewSensorData: ");
   debugln(sSensor[iLastReceivedChannel].sMacAddress);
   debug("Channel Nr.:");
@@ -584,10 +577,12 @@ void formatNewSensorData()
   debugln();
   sNewSensorChannel = String(sSensor[iLastReceivedChannel].iSensorChannel);
   sNewSensorMAC = (sSensor[iLastReceivedChannel].sMacAddress);
-  sSensor[iLastReceivedChannel].bSensorRec = true; // set to read to not display multiple times
+  sSensor[iLastReceivedChannel].bSensorRec = true; // set true to not display multiple times
   bNewSensorFound = true;
 }
 
+/* update the display independently of other functions 
+all display output is done here */ 
 void updateDisplay()
 {
   // clear the display
@@ -605,7 +600,7 @@ void updateDisplay()
     {
       // display data of new sensor received
       display.setFont(ArialMT_Plain_10);
-      display.drawString(0, 10, "New Sensor found");
+      display.drawString(0, 10, "last sensor added");
       display.drawString(0, 20, "Channel:");
       display.drawString(50, 20, sNewSensorChannel);
       display.drawString(0, 30, "MAC:");
@@ -628,7 +623,7 @@ void updateDisplay()
 
 void startOTA()
 {
-  // Disconnect Wifi and connect to local WLAN
+  // Disconnect AP and connect to local WLAN
   // OTA Setup PWD comes from HomeAutomationSecrets.h outside repository
 
   debugln("StartOTA");
