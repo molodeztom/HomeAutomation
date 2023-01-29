@@ -62,6 +62,7 @@ struct SENSOR_DATA
     int iLight = 0;
     bool bSensorRec = false; //true when valid sensor data received in time frame
     //int iSensorCnt = 6;      //Counter for timeout no values after some time renamed
+    bool bSensorRegistered = false; //true when sensor is first time received
     int iSecSinceLastRead; //Seconds count up between sensor readings
 };
 SENSOR_DATA sSensor0, sSensor1, sSensor2, sSensor3, sSensor4, sSensor5;
