@@ -64,7 +64,7 @@ extern "C"
 
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
-const String sSoftware = "HubESPNow V0.24";
+const String sSoftware = "HubESPNow V0.25";
 
 SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -99,19 +99,18 @@ struct DATEN_STRUKTUR
   float fESPNowVolt = -99; // Batterie Sensor
 };
 
-
 /***************************
  * Serial Communication Settings
  **************************/
 int serialCounter = 0;
-long serialTransferTime = 0;                       //Timer for uploading data to main station
-const unsigned long ulSendIntervall = 15 * 1000UL; //Upload to home server every 15x sec
+long serialTransferTime = 0;                       // Timer for uploading data to main station
+const unsigned long ulSendIntervall = 15 * 1000UL; // Upload to home server every 15x sec
 /* SoftwareSerial mySerial (rxPin, txPin, inverse_logic);
    TX = GPIO01 + D10 PIN 22 RX = GPIO03 = D9 PIN21
-   ESPNowHub HW Version 1 uses non standard PIN 7 GPIO13 = D7 for TXD to ESP WLAN and standard PIN 21 GPIO03 for receive from ESP WLAN 
-   HW Bridges have to be set 
+   ESPNowHub HW Version 1 uses non standard PIN 7 GPIO13 = D7 for TXD to ESP WLAN and standard PIN 21 GPIO03 for receive from ESP WLAN
+   HW Bridges have to be set
    want to transmit the date to the main station over a different serial link than the one used by the monitor */
-SoftwareSerial swSer(D9, D7, false);  
+SoftwareSerial swSer(D9, D7, false);
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
 String textSensTemp[nMaxSensors];
@@ -185,8 +184,8 @@ const unsigned long ulSwitchReadInterval = 0.4 * 1000UL; // Time until switch is
  * Display Settings
  **************************/
 const int I2C_DISPLAY_ADDRESS = 0x3c;
-const int SDA_PIN = D2; //GPIO4
-const int SCL_PIN = D1; //GPIO5
+const int SDA_PIN = D2; // GPIO4
+const int SCL_PIN = D1; // GPIO5
 // const int SDA_PIN = D3; //GPIO0
 // const int SCL_PIN = D4; //GPIO2
 
@@ -222,8 +221,8 @@ int ledNr = 0;
 
 void setup()
 {
-  Serial.begin(115200); //Hardware port for programming and debug
-  swSer.begin(swBAUD_RATE); //SW port for serial communication
+  Serial.begin(115200);     // Hardware port for programming and debug
+  swSer.begin(swBAUD_RATE); // SW port for serial communication
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
   ProgramMode = normal;
@@ -436,14 +435,13 @@ void loop()
     }
     lSensorValidTime = millis();
   }
-//Upload Temperature Humidity to MainStation every xSeconds
+  // Upload Temperature Humidity to MainStation every xSeconds
   if ((millis() - serialTransferTime > ulSendIntervall))
   {
     debugln("Send to Main Station");
     sendDataToMainStation();
     serialTransferTime = millis();
   }
-
 }
 
 // Callback funktion for receiving data over ESPNOW
@@ -496,131 +494,39 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 
 void sendDataToMainStation()
 {
-//serialize Sensor Data to json and send using sw serial connection
-//only send sensor data when recently a sensor sent something
-//Allocate JsonBuffer TODO calculate new JsonBuffer size
+// serialize Sensor Data to json and send using sw serial connection
+// only send sensor data when recently a sensor sent something
+// Allocate JsonBuffer TODO calculate new JsonBuffer size
 #ifdef DEBUG
   char output[256];
 #endif
   StaticJsonDocument<capacity> jsonDocument;
-
-
-  if (sSensor0.bSensorRec == true)
+  // change to array
+  for (int n = 0; n < nMaxSensors; n++)
   {
-    //SensorLoc recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 0;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["iLightLoc"] = sSensor0.iLight;
-    jsonDocument["fAtmoLoc"] = sSensor0.fAtmo;
-    sSensor0.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
+    if (sSensor[n].bSensorRec == true)
+    {
+      // Sensor n recieved something
+      // TODO this is Sensor 5 as an example add all other values
+      jsonDocument.clear();
+      jsonDocument["sensor"] = n;
+      jsonDocument["time"] = serialCounter++;
+      jsonDocument["fTempA"] = sSensor[n].fTempA;
+      jsonDocument["fHumi"] = sSensor[n].fHumi;
+      jsonDocument["fVolt"] = sSensor[n].fVolt;
+      jsonDocument["iLight"] = sSensor[n].iLight;
+      jsonDocument["fAtmo"] = sSensor[n].fAtmo;
+      sSensor[n].bSensorRec = false;
+      swSer.print(startMarker); // $$ Start Code
+      serializeJson(jsonDocument, swSer);
+      swSer.print(endMarker); // $$ End Code
+      delay(10);
 #ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
+      serializeJson(jsonDocument, output);
+      Serial.println(output);
+      memset(&output, 0, 256);
 #endif
-  }
-  if (sSensor1.bSensorRec == true)
-  {
-    //Sensor 1 recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 1;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["fTemp1A"] = sSensor1.fTempA;
-    jsonDocument["fHumi1"] = sSensor1.fHumi;
-    jsonDocument["fVolt1"] = sSensor1.fVolt;
-    sSensor1.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
-#ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
-#endif
-  }
-  if (sSensor2.bSensorRec == true)
-  {
-    //Sensor 2 recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 2;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["fTemp2A"] = sSensor2.fTempA;
-    jsonDocument["fVolt2"] = sSensor2.fVolt;
-    sSensor2.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
-#ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
-#endif
-  }
-  if (sSensor3.bSensorRec == true)
-  {
-    //Sensor 3 recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 3;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["fTemp3A"] = sSensor3.fTempA;
-    jsonDocument["fVolt3"] = sSensor3.fVolt;
-    sSensor3.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
-#ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
-#endif
-  }
-  if (sSensor4.bSensorRec == true)
-  {
-    //Sensor 4 recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 4;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["fTemp4A"] = sSensor4.fTempA;
-    jsonDocument["fHumi4]"] = sSensor4.fHumi;
-    jsonDocument["fVolt4"] = sSensor4.fVolt;
-    sSensor4.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
-#ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
-#endif
-  }
-  if (sSensor5.bSensorRec == true)
-  {
-    //Sensor 5 recieved something
-    jsonDocument.clear();
-    jsonDocument["sensor"] = 5;
-    jsonDocument["time"] = serialCounter++;
-    jsonDocument["fTemp5A"] = sSensor5.fTempA;
-    jsonDocument["fHumi5"] = sSensor5.fHumi;
-    jsonDocument["fVolt5"] = sSensor5.fVolt;
-    sSensor5.bSensorRec = false;
-    swSer.print(startMarker); // $$ Start Code
-    serializeJson(jsonDocument, swSer);
-    swSer.print(endMarker); // $$ End Code
-    delay(10);
-#ifdef DEBUG
-    serializeJson(jsonDocument, output);
-    Serial.println(output);
-    memset(&output, 0, 256);
-#endif
+    }
   }
 }
 
@@ -682,9 +588,9 @@ void wifiConnectStation()
   debugln();
 }
 
-/* not called in recv data to avoid delay 
+/* not called in recv data to avoid delay
 called every x seconds to update values for all nMaxSensors
-create string for display output 
+create string for display output
 Local sensor has no recieve timeout */
 void formatTempExt()
 {
@@ -738,8 +644,8 @@ void formatNewSensorData()
   bNewSensorFound = true;
 }
 
-/* update the display independently of other functions 
-all display output is done here */ 
+/* update the display independently of other functions
+all display output is done here */
 void updateDisplay()
 {
   // clear the display
