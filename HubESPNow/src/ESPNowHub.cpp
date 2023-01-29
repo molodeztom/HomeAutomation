@@ -63,7 +63,7 @@ extern "C"
 
 // common data e.g. sensor definitions
 #include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
-const String sSoftware = "HubESPNow V0.23";
+const String sSoftware = "HubESPNow V0.24";
 
 SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -535,13 +535,15 @@ void formatTempExt()
 {
   // if sensor not updated within time SensValidMax is reached and no value displayed
   // and sensor has a valid first reading
+  debugln("formatTempExt");
+
   for (int n = 0; n < nMaxSensors; n++)
   {
-    if ((sSensor[n].iSecSinceLastRead > SensValidMax) && (sSensor[n].bSensorRec == true))
+    if ((sSensor[n].iSecSinceLastRead > SensValidMax) || (sSensor[n].bSensorRec == false))
     {
       // kein Sensor gefunden
       debug("Sensor Nr.: ");
-      debug(n);
+      debugln(n);
       debug("channel: ");
       debugln(sSensor[n].iSensorChannel);
       debugln(" no sensor data received");
