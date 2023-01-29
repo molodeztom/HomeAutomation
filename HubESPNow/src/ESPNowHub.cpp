@@ -33,6 +33,7 @@ Versenden der Werte in JSON Format an HomeServer über Serial
 20230128  V0.22:  +Display information when sensor connects first time
 20230129  V0.23:  c clean up code check release compilation
 20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
+20340129  V0.25:  +serial communication to ESPWLAN
 
  */
 #include <Arduino.h>
@@ -97,6 +98,20 @@ struct DATEN_STRUKTUR
   float fESPNowHumi = -99;
   float fESPNowVolt = -99; // Batterie Sensor
 };
+
+
+/***************************
+ * Serial Communication Settings
+ **************************/
+int serialCounter = 0;
+long serialTransferTime = 0;                       //Timer for uploading data to main station
+const unsigned long ulSendIntervall = 15 * 1000UL; //Upload to home server every 15x sec
+/* SoftwareSerial mySerial (rxPin, txPin, inverse_logic);
+   TX = GPIO01 + D10 PIN 22 RX = GPIO03 = D9 PIN21
+   ESPNowHub HW Version 1 uses non standard PIN 7 GPIO13 = D7 for TXD to ESP WLAN and standard PIN 21 GPIO03 for receive from ESP WLAN 
+   HW Bridges have to be set 
+   want to transmit the date to the main station over a different serial link than the one used by the monitor */
+SoftwareSerial swSer(D9, D7, false);  
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
 String textSensTemp[nMaxSensors];
@@ -170,8 +185,8 @@ const unsigned long ulSwitchReadInterval = 0.4 * 1000UL; // Time until switch is
  * Display Settings
  **************************/
 const int I2C_DISPLAY_ADDRESS = 0x3c;
-const int SDA_PIN = D2;
-const int SCL_PIN = D1;
+const int SDA_PIN = D2; //GPIO4
+const int SCL_PIN = D1; //GPIO5
 // const int SDA_PIN = D3; //GPIO0
 // const int SCL_PIN = D4; //GPIO2
 
@@ -190,6 +205,7 @@ void formatTempExt();
 void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
+void sendDataToMainStation();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -206,7 +222,8 @@ int ledNr = 0;
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(115200); //Hardware port for programming and debug
+  swSer.begin(swBAUD_RATE); //SW port for serial communication
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
   ProgramMode = normal;
@@ -282,7 +299,7 @@ void setup()
     debugln("Found BMP180 or BMP085 sensor at 0x77");
   }
   // local sensor always read used for registration of new sensor
-  sSensor[0].bSensorRec = true;
+  sSensor[0].bSensorRegistered = true;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -419,6 +436,14 @@ void loop()
     }
     lSensorValidTime = millis();
   }
+//Upload Temperature Humidity to MainStation every xSeconds
+  if ((millis() - serialTransferTime > ulSendIntervall))
+  {
+    debugln("Send to Main Station");
+    sendDataToMainStation();
+    serialTransferTime = millis();
+  }
+
 }
 
 // Callback funktion for receiving data over ESPNOW
@@ -440,7 +465,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; // remember for display
     sSensor[iChannelNr].iSecSinceLastRead = 0;
-    if (sSensor[iLastReceivedChannel].bSensorRec == false)
+    if (sSensor[iLastReceivedChannel].bSensorRegistered == false)
     {
       // do this only on very first packet of a sensor
       // save MAC Address and channel number in array
@@ -468,6 +493,136 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debugln();
   }
 };
+
+void sendDataToMainStation()
+{
+//serialize Sensor Data to json and send using sw serial connection
+//only send sensor data when recently a sensor sent something
+//Allocate JsonBuffer TODO calculate new JsonBuffer size
+#ifdef DEBUG
+  char output[256];
+#endif
+  StaticJsonDocument<capacity> jsonDocument;
+
+
+  if (sSensor0.bSensorRec == true)
+  {
+    //SensorLoc recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 0;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["iLightLoc"] = sSensor0.iLight;
+    jsonDocument["fAtmoLoc"] = sSensor0.fAtmo;
+    sSensor0.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+  if (sSensor1.bSensorRec == true)
+  {
+    //Sensor 1 recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 1;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["fTemp1A"] = sSensor1.fTempA;
+    jsonDocument["fHumi1"] = sSensor1.fHumi;
+    jsonDocument["fVolt1"] = sSensor1.fVolt;
+    sSensor1.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+  if (sSensor2.bSensorRec == true)
+  {
+    //Sensor 2 recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 2;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["fTemp2A"] = sSensor2.fTempA;
+    jsonDocument["fVolt2"] = sSensor2.fVolt;
+    sSensor2.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+  if (sSensor3.bSensorRec == true)
+  {
+    //Sensor 3 recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 3;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["fTemp3A"] = sSensor3.fTempA;
+    jsonDocument["fVolt3"] = sSensor3.fVolt;
+    sSensor3.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+  if (sSensor4.bSensorRec == true)
+  {
+    //Sensor 4 recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 4;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["fTemp4A"] = sSensor4.fTempA;
+    jsonDocument["fHumi4]"] = sSensor4.fHumi;
+    jsonDocument["fVolt4"] = sSensor4.fVolt;
+    sSensor4.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+  if (sSensor5.bSensorRec == true)
+  {
+    //Sensor 5 recieved something
+    jsonDocument.clear();
+    jsonDocument["sensor"] = 5;
+    jsonDocument["time"] = serialCounter++;
+    jsonDocument["fTemp5A"] = sSensor5.fTempA;
+    jsonDocument["fHumi5"] = sSensor5.fHumi;
+    jsonDocument["fVolt5"] = sSensor5.fVolt;
+    sSensor5.bSensorRec = false;
+    swSer.print(startMarker); // $$ Start Code
+    serializeJson(jsonDocument, swSer);
+    swSer.print(endMarker); // $$ End Code
+    delay(10);
+#ifdef DEBUG
+    serializeJson(jsonDocument, output);
+    Serial.println(output);
+    memset(&output, 0, 256);
+#endif
+  }
+}
 
 // function LED on off
 void ledOn(uint8_t LedNr)
@@ -539,7 +694,7 @@ void formatTempExt()
 
   for (int n = 0; n < nMaxSensors; n++)
   {
-    if ((sSensor[n].iSecSinceLastRead > SensValidMax) || (sSensor[n].bSensorRec == false))
+    if ((sSensor[n].iSecSinceLastRead > SensValidMax) || (sSensor[n].bSensorRegistered == false))
     {
       // kein Sensor gefunden
       debug("Sensor Nr.: ");
@@ -569,7 +724,7 @@ void drawSens5Temp()
 void formatNewSensorData()
 {
   // When a sensor connects for the first time in AP mode output data
-  // this is detected by bSensorRec which is initially false and set true on second read
+  // this is detected by bSensorRegistered which is initially false and set true on second read
   // channel 0 is local sensor thus not displayed
   // output MAC adress and channel
   debug("formatNewSensorData: ");
@@ -579,7 +734,7 @@ void formatNewSensorData()
   debugln();
   sNewSensorChannel = String(sSensor[iLastReceivedChannel].iSensorChannel);
   sNewSensorMAC = (sSensor[iLastReceivedChannel].sMacAddress);
-  sSensor[iLastReceivedChannel].bSensorRec = true; // set true to not display multiple times
+  sSensor[iLastReceivedChannel].bSensorRegistered = true; // set true to not display multiple times
   bNewSensorFound = true;
 }
 
