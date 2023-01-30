@@ -1,15 +1,19 @@
 /*
 
 Hardware:
-ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display and div sensors
-functions:
-Anzeige von div. Werten aus lokalen Sensoren auf OLED
-Empfang von externen Temperaturwerten über ESP-Now
-Versenden der Werte über WLAN an Thingspeak
-Versenden der Werte in JSON Format an HomeServer über Serial
+ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display
+and div sensors
+Software:
+One ESP with ESPNowHub and one with ESPWLANHub firmware needed. 
+Functions:
+Display sensor values on OLED 
+Get internal sensor values from light sensor and BMP 180 air pressure
+Receive external sensor values using ESP-Now protocol
+Send sensor values as JSON over serial interface to ESPWLANHub
+Control LED output and switches input.
 
-20220918: V0.1:   Neues Projekt aus ESPHubHW Test und WeatherStation main.cpp
-20220918: V0.2:   Temperatursensor DS18B20 dazu
+20220918: V0.1:   New project derived from ESPHubHW test and WeatherStation main.cpp
+20220918: V0.2:   add temp sensor DS18B20
 20220925  V0.3:   remove tempsensor it is connected to ESPWLAN instead
 20220925  V0.4:   read BMP085 pressure sensor
 20220925  V0.5:   read "Arbeitszimmer" sensor using ESPNow
