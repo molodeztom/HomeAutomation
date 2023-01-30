@@ -67,7 +67,8 @@ extern "C"
 }
 
 // common data e.g. sensor definitions
-#include "D:\Projects\HomeAutomation\HomeAutomationCommon.h"
+#include <HomeAutomationCommon.h>
+
 const String sSoftware = "HubESPNow V0.25";
 
 SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
