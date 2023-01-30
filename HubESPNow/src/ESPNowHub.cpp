@@ -11,7 +11,7 @@ Get internal sensor values from light sensor and BMP 180 air pressure
 Receive external sensor values using ESP-Now protocol
 Send sensor values as JSON over serial interface to ESPWLANHub
 Control LED output and switches input.
-
+History:
 20220918: V0.1:   New project derived from ESPHubHW test and WeatherStation main.cpp
 20220918: V0.2:   add temp sensor DS18B20
 20220925  V0.3:   remove tempsensor it is connected to ESPWLAN instead
