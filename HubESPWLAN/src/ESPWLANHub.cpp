@@ -3,19 +3,21 @@ Hardware:
 ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display
 and div sensors
 Software:
-One ESP with ESPNowHub and one with ESPWLANHub firmware needed. 
+One ESP with ESPNowHub and one with ESPWLANHub firmware needed.
 Functions:
 receive sensor values over serial interface in JSON format
 send sensor values over WLAN in MQTT format
-receieve local sensor value from DS18B20 
+receieve local sensor value from DS18B20
 History:
-20230130  V0.1: Initial version compiles not tested for function 
-20230131  V0.2: Add OTA  
-  
+20230130  V0.1: Initial version compiles not tested for function
+20230131  V0.2: + OTA
+20230131  V0.3: + use DEBUG macro 
 */
 
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+// 1 means debug on 0 means off
+#define DEBUG 1
 #include <SoftwareSerial.h>
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
@@ -24,11 +26,26 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.2";
+const String sSoftware = "ESPWLANHub V0.3";
+// debug macro
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Serial.println(x)
+#define debugv(s, v)    \
+  {                     \
+    Serial.print(F(s)); \
+    Serial.println(v);  \
+  }
 
+#else
+#define debug(x)
+#define debugln(x)
+#define debugv(format, ...)
+#define debugarg(...)
+#endif
 
 /***************************
- * MQTT Settings 
+ * MQTT Settings
  ***************************/
 WiFiClient MQTT_client;
 PubSubClient mqttClient(MQTT_client);
@@ -46,24 +63,26 @@ PubSubClient mqttClient(MQTT_client);
 // want to transmit the date to the main station over a different serial link than the one used by the monitor
 //  SoftwareSerial swSer(D6, D7, false); // only first (RX) used
 static boolean recvInProgress = false;
-char cSerialRxIn[nMaxRxArray]; //Serial Rx Buffer
-bool newData = false;          //Flag RxData received
-bool bJsonOK = false;          //true if JSON could be decoded
+char cSerialRxIn[nMaxRxArray]; // Serial Rx Buffer
+bool newData = false;          // Flag RxData received
+bool bJsonOK = false;          // true if JSON could be decoded
 
-//forward declarations
+// forward declarations
 void wifiConnectStation();
 void recvSerialwStartEndMarkers();
 void showSerialRead();
 void readJSONMessage();
 void sendMQTTMessage();
 
-void setup() {
- Serial.begin(swBAUD_RATE);
+void setup()
+{
+  Serial.begin(swBAUD_RATE);
   // initialize digital pin LED_BUILTIN as an output.
   pinMode(LED_BUILTIN, OUTPUT);
+  Serial.println(sSoftware);
 
-  //WIFI Setup
-  WiFi.persistent(false); //https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
+  // WIFI Setup
+  WiFi.persistent(false); // https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
   wifiConnectStation();
   if (WiFi.status() == WL_CONNECTED)
   {
@@ -72,53 +91,51 @@ void setup() {
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
   mqttClient.setServer(SERVER, SERVERPORT);
-  //Set timeout counter to maximum to provoke error on startup
+  // Set timeout counter to maximum to provoke error on startup
   sSensor0.iSecSinceLastRead = SensValidMax;
 
-  Serial.println(sSoftware);
- // digitalWrite(LED_BUILTIN, ledState);
+  // digitalWrite(LED_BUILTIN, ledState);
   ArduinoOTA.setHostname(MYHOSTNAME);
   ArduinoOTA.setPassword(OTA_PWD);
   ArduinoOTA.begin();
-  Serial.println("Setup done");
+  debugln("Setup done");
 }
 
 void loop()
 {
 
-//LED Blink TODO remove
-  //static unsigned long previousMillis = 0; //for blink
-  //const long interval = 500;
-  //Receive serial message from weather station
-  //recvSerialwStartEndMarkers();
-     ArduinoOTA.handle();
+  // LED Blink TODO remove
+  // static unsigned long previousMillis = 0; //for blink
+  // const long interval = 500;
+  // Receive serial message from weather station
+  // recvSerialwStartEndMarkers();
+  ArduinoOTA.handle();
   showSerialRead();
-  mqttClient.loop(); //MQTT keep alive
-  //At least one sensor reading is available
+  mqttClient.loop(); // MQTT keep alive
+  // At least one sensor reading is available
   if (newData)
   {
     newData = false;
     readJSONMessage();
     sendMQTTMessage();
   }
-  //Every x seconds reading count up to detect timeout and then do not display
-  //counter goes up to SensValidMax if not reset during a sensor reading
-  //also used to send MQTT error every interval
+  // Every x seconds reading count up to detect timeout and then do not display
+  // counter goes up to SensValidMax if not reset during a sensor reading
+  // also used to send MQTT error every interval
   if ((millis() - lSensorValidTime > ulSensorValidIntervall))
   {
     sSensor0.iSecSinceLastRead++;
     sSensor1.iSecSinceLastRead++;
     sSensor2.iSecSinceLastRead++;
     sSensor3.iSecSinceLastRead++;
-    //sSensor4.iSecSinceLastRead++;
+    // sSensor4.iSecSinceLastRead++;
     sSensor5.iSecSinceLastRead++;
-    //will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
+    // will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
     if (sSensor0.iSecSinceLastRead > SensValidMax)
     {
       sendMQTTMessage();
-#ifdef DEBUG
-      Serial.println("Sensor reading timeout");
-#endif
+
+      debugln("Sensor reading timeout");
     }
     lSensorValidTime = millis();
   }
@@ -128,16 +145,16 @@ void loop()
   if(bJsonOK == true && (millis() - uploadTime > uploadInterval)){
     uploadMeasurements();
     uploadTime = millis();
-    Serial.print("Upload Time: ");
-    Serial.println(uploadTime);
-  
+    debug("Upload Time: ");
+    debugln(uploadTime);
+
     bJsonOK = false;
     }
     */
 
   //--------------------------blink part
 
-  //unsigned long currentMillis = millis();
+  // unsigned long currentMillis = millis();
   /*
   if (currentMillis - previousMillis >= interval)
   {
@@ -154,35 +171,35 @@ void loop()
   digitalWrite(LED_BUILTIN, ledState);
   */
 }
-//Read JSON values from serial recieved message
+// Read JSON values from serial recieved message
 void readJSONMessage()
 {
-  int iSensor;   //Sensor number
-  int iCheckSum; //temp variable to check values very simple method
+  int iSensor;   // Sensor number
+  int iCheckSum; // temp variable to check values very simple method
   DeserializationError err = deserializeJson(jsonDocument, cSerialRxIn);
   if (err)
   {
-    Serial.print(F("deserializeJson failed with code "));
-    Serial.println(err.c_str());
+    debug(F("deserializeJson failed with code "));
+    debugln(err.c_str());
   }
   else
   {
-    //get single values from JSON to local values if not found set default value to recognize the problem
-    //common values for all sensors
+    // get single values from JSON to local values if not found set default value to recognize the problem
+    // common values for all sensors
     iSensor = jsonDocument["sensor"] | InvalidMeasurement;
     if (iSensor < 0 || iSensor > 5)
       iSensor = 99; // do not go into any switch case
 #ifdef DEBUG
-    int serialCount; //displays a counter received from BaseStation
+    int serialCount; // displays a counter received from BaseStation
     serialCount = jsonDocument["time"];
-    Serial.print("Deserialize Sensor nr: ");
-    Serial.println(iSensor);
-    Serial.println(serialCount);
+    debug("Deserialize Sensor nr: ");
+    debugln(iSensor);
+    debugln(serialCount);
 #endif
     switch (iSensor)
     {
     case 0:
-           sSensor0.iLight = jsonDocument["iLightLoc"] | InvalidMeasurement;
+      sSensor0.iLight = jsonDocument["iLightLoc"] | InvalidMeasurement;
       sSensor0.fAtmo = jsonDocument["fAtmoLoc"] | InvalidMeasurement;
       iCheckSum = sSensor0.iLight + sSensor0.fAtmo;
       if (iCheckSum < InvalidMeasurement)
@@ -247,47 +264,47 @@ void readJSONMessage()
       break;
 
     default:
-      Serial.println("Error: Sensor Nr recieved out of range");
+      debugln("Error: Sensor Nr recieved out of range");
       break;
     }
     bJsonOK = false;
     /*
 #ifdef DEBUG
-    Serial.println("deserialized json document:");
-    Serial.print("serialCount: ");
-    Serial.println(serialCount);
-    Serial.print("TempLocal: ");
-    Serial.println(sSensor0.fTempA);
-    Serial.print("HumiLocal ");
-    Serial.println(sSensor0.fHumi);
-    Serial.print("LightLocal: ");
-    Serial.println(sSensor0.iLight);
-    Serial.print("AtmoLoc: ");
-    Serial.println(sSensor0.fAtmo);
-    Serial.print("Humi 1: ");
-    Serial.println(sSensor1.fHumi);
-    Serial.print("Temp 1A: ");
-    Serial.println(sSensor1.fTempA);
-    Serial.print("Batt 1: ");
-    Serial.println(sSensor1.fVolt);
-    Serial.print("Temp 2A: ");
-    Serial.println(sSensor2.fTempA);
-    Serial.print("Batt 2: ");
-    Serial.println(sSensor2.fVolt);
-    Serial.print("Temp 3: ");
-    Serial.println(sSensor3.fTempA);
-    Serial.print("Batt3: ");
-    Serial.println(sSensor3.fVolt);
+    debugln("deserialized json document:");
+    debug("serialCount: ");
+    debugln(serialCount);
+    debug("TempLocal: ");
+    debugln(sSensor0.fTempA);
+    debug("HumiLocal ");
+    debugln(sSensor0.fHumi);
+    debug("LightLocal: ");
+    debugln(sSensor0.iLight);
+    debug("AtmoLoc: ");
+    debugln(sSensor0.fAtmo);
+    debug("Humi 1: ");
+    debugln(sSensor1.fHumi);
+    debug("Temp 1A: ");
+    debugln(sSensor1.fTempA);
+    debug("Batt 1: ");
+    debugln(sSensor1.fVolt);
+    debug("Temp 2A: ");
+    debugln(sSensor2.fTempA);
+    debug("Batt 2: ");
+    debugln(sSensor2.fVolt);
+    debug("Temp 3: ");
+    debugln(sSensor3.fTempA);
+    debug("Batt3: ");
+    debugln(sSensor3.fVolt);
    #endif
-   
-    Serial.print("Temp 4A: "); 
-    Serial.println(sSensor4.fTempA);
-    Serial.print("Temp 4B: ");
-    Serial.println(sSensor4.fTempB);
-    Serial.print("Batt 4: ");
-    Serial.println(sSensor4.fVolt);
-    Serial.print("Humi 4: ");
-    Serial.println(sSensor4.fHumi);
+
+    debug("Temp 4A: ");
+    debugln(sSensor4.fTempA);
+    debug("Temp 4B: ");
+    debugln(sSensor4.fTempB);
+    debug("Batt 4: ");
+    debugln(sSensor4.fVolt);
+    debug("Humi 4: ");
+    debugln(sSensor4.fHumi);
     */
   }
 }
@@ -296,47 +313,45 @@ void readJSONMessage()
 // send errors per sensor value in a separate channel
 void sendMQTTMessage()
 {
-  char valueStr[20]; //helper to convert string to MQTT char
+  char valueStr[20]; // helper to convert string to MQTT char
   if (!mqttClient.connected())
   {
-#ifdef DEBUG
-    Serial.print("MQTT not connected, rc=");
-    Serial.print(mqttClient.state());
-    Serial.println("reconnect MQTT");
-#endif
+
+    debug("MQTT not connected, rc=");
+    Serial.println(mqttClient.state());
+    debugln("reconnect MQTT");
+
     // Attempt to connect
     if (mqttClient.connect("MQTT_CLIENTD", MQTT_USERNAME, MQTT_KEY))
     {
-#ifdef DEBUG
-      Serial.println("MQTT connected");
-#endif
+
+      debugln("MQTT connected");
     }
     else
     {
-      Serial.print("MQTT failed, rc=");
-      Serial.print(mqttClient.state());
+      debug("MQTT failed, rc=");
+      Serial.println(mqttClient.state());
     }
   }
 
-  //Sensor Loc
+  // Sensor Loc
   if (sSensor0.bSensorRec == true)
   {
-    
+
     dtostrf(sSensor0.iLight, 3, 0, valueStr);
     mqttClient.publish("SensorLoc/iLight", valueStr);
     dtostrf(sSensor0.fAtmo, 4, 2, valueStr);
     mqttClient.publish("SensorLoc/fAtmo", valueStr);
     sSensor0.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send SensorLoc");
-#endif
+
+    debugln("MQTT send SensorLoc");
   }
   else
   {
     if (sSensor0.iSecSinceLastRead > SensValidMax)
       mqttClient.publish("SensorLoc/Err", "1");
   }
-  //Sensor 1
+  // Sensor 1
   if (sSensor1.bSensorRec == true)
   {
     dtostrf(sSensor1.fTempA, 4, 2, valueStr);
@@ -346,17 +361,16 @@ void sendMQTTMessage()
     dtostrf(sSensor1.fHumi, 4, 2, valueStr);
     mqttClient.publish("Sensor1/fHumi", valueStr);
     sSensor1.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send Sensor1");
-#endif
+
+    debugln("MQTT send Sensor1");
   }
   else
   {
     if (sSensor1.iSecSinceLastRead > SensValidMax)
-  
+
       mqttClient.publish("Sensor1/Err", "1");
   }
-  //Sensor 2
+  // Sensor 2
   if (sSensor2.bSensorRec == true)
   {
     dtostrf(sSensor2.fTempA, 4, 2, valueStr);
@@ -364,20 +378,19 @@ void sendMQTTMessage()
     dtostrf(sSensor2.fVolt, 4, 2, valueStr);
     mqttClient.publish("Sensor2/fVolt", valueStr);
     sSensor2.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send Sensor2");
-#endif
+
+    debugln("MQTT send Sensor2");
   }
   else
   {
     if (sSensor2.iSecSinceLastRead > SensValidMax)
     {
       mqttClient.publish("Sensor2/Err", "1");
-      Serial.println("Error Sens2");
-      Serial.println(sSensor2.iSecSinceLastRead);
+      debugln("Error Sens2");
+      debugln(sSensor2.iSecSinceLastRead);
     }
   }
-  //Sensor 3
+  // Sensor 3
   if (sSensor3.bSensorRec == true)
   {
     dtostrf(sSensor3.fTempA, 4, 2, valueStr);
@@ -385,16 +398,15 @@ void sendMQTTMessage()
     dtostrf(sSensor3.fVolt, 4, 2, valueStr);
     mqttClient.publish("Sensor3/fVolt", valueStr);
     sSensor3.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send Sensor3");
-#endif
+
+    debugln("MQTT send Sensor3");
   }
   else
   {
     if (sSensor3.iSecSinceLastRead > SensValidMax)
       mqttClient.publish("Sensor3/Err", "1");
   }
-  //Sensor 4
+  // Sensor 4
   if (sSensor4.bSensorRec == true)
   {
     dtostrf(sSensor4.fTempA, 4, 2, valueStr);
@@ -404,15 +416,14 @@ void sendMQTTMessage()
     dtostrf(sSensor4.fVolt, 4, 2, valueStr);
     mqttClient.publish("Sensor4/fVolt", valueStr);
     sSensor4.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send Sensor4");
-#endif
+
+    debugln("MQTT send Sensor4");
   }
   else
   {
     if (sSensor4.iSecSinceLastRead > SensValidMax)
       mqttClient.publish("Sensor4/Err", "1");
-  } //Sensor 5
+  } // Sensor 5
   if (sSensor5.bSensorRec == true)
   {
     dtostrf(sSensor5.fTempA, 4, 2, valueStr);
@@ -424,9 +435,8 @@ void sendMQTTMessage()
     dtostrf(sSensor5.fHumi, 4, 2, valueStr);
     mqttClient.publish("Sensor5/fHumi", valueStr);
     sSensor5.bSensorRec = false;
-#ifdef DEBUG
-    Serial.println("MQTT send Sensor5");
-#endif
+
+    debugln("MQTT send Sensor5");
   }
   else
   {
@@ -438,8 +448,8 @@ void sendMQTTMessage()
 // recieve payload between start and end marker (exluded) from serial
 void recvSerialwStartEndMarkers()
 {
-  static char cRx;     //one byte read
-  static byte nRx = 0; //received chars counter
+  static char cRx;     // one byte read
+  static byte nRx = 0; // received chars counter
 
   while (Serial.available() > 0 && newData == false)
   {
@@ -448,20 +458,20 @@ void recvSerialwStartEndMarkers()
     {
       if (cRx != endMarker)
       {
-        //read payload
+        // read payload
         cSerialRxIn[nRx] = cRx;
         nRx++;
         if (nRx >= nMaxRxArray)
         {
-          Serial.println("Array too small. Size:");
-          nRx = 0; //too much stop reading
+          debugln("Array too small. Size:");
+          nRx = 0; // too much stop reading
           recvInProgress = false;
           newData = false;
         }
       }
       else
       {
-        //end Marker found
+        // end Marker found
         recvInProgress = false;
         nRx = 0;
         newData = true;
@@ -472,33 +482,30 @@ void recvSerialwStartEndMarkers()
 
       recvInProgress = true;
     }
-  } //end while serial available
-} //end recvSerial..
+  } // end while serial available
+} // end recvSerial..
 
 void showSerialRead()
 {
-#ifdef DEBUG
+
   if (newData == true)
   {
-    Serial.print("input read: ");
-    Serial.println(cSerialRxIn);
+    debug("input read: ");
+    debugln(cSerialRxIn);
   }
-#endif
 }
 
-//Connect to local WIFI
+// Connect to local WIFI
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
   WiFi.hostname(MYHOSTNAME);
-  Serial.println("WifiStat connecting to ");
-  Serial.println(WIFI_SSID);
+  debugln("WifiStat connecting to ");
+  debugln(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(250);
-    Serial.print(".");
+    debug(".");
   }
 }
-
-
