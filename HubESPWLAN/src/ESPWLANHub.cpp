@@ -9,11 +9,13 @@ receive sensor values over serial interface in JSON format
 send sensor values over WLAN in MQTT format
 receieve local sensor value from DS18B20 
 History:
-2020321 V0.1: Initial version compiles not tested for function 
+20230130  V0.1: Initial version compiles not tested for function 
+20230131  V0.2: Add OTA  
   
 */
 
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #include <SoftwareSerial.h>
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
@@ -22,7 +24,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.1";
+const String sSoftware = "ESPWLANHub V0.2";
 
 
 /***************************
@@ -30,6 +32,11 @@ const String sSoftware = "ESPWLANHub V0.1";
  ***************************/
 WiFiClient MQTT_client;
 PubSubClient mqttClient(MQTT_client);
+
+/***************************
+ * OTA
+ **************************/
+#define MYHOSTNAME "HubESPWLAN"
 
 /***************************
  * Serial Rx variables
@@ -70,8 +77,10 @@ void setup() {
 
   Serial.println(sSoftware);
  // digitalWrite(LED_BUILTIN, ledState);
+  ArduinoOTA.setHostname(MYHOSTNAME);
+  ArduinoOTA.setPassword(OTA_PWD);
+  ArduinoOTA.begin();
   Serial.println("Setup done");
-
 }
 
 void loop()
@@ -82,6 +91,7 @@ void loop()
   //const long interval = 500;
   //Receive serial message from weather station
   //recvSerialwStartEndMarkers();
+     ArduinoOTA.handle();
   showSerialRead();
   mqttClient.loop(); //MQTT keep alive
   //At least one sensor reading is available
@@ -480,6 +490,7 @@ void showSerialRead()
 void wifiConnectStation()
 {
   WiFi.mode(WIFI_STA);
+  WiFi.hostname(MYHOSTNAME);
   Serial.println("WifiStat connecting to ");
   Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PWD);
