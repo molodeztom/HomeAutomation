@@ -71,6 +71,9 @@ bool bLedState = false;
 // timing
 long lMQTTLoop = 0;
 const unsigned long ulMQTTTimer = 5 * 10000UL; // time in sec
+long lOneMinuteTime = 0;
+const unsigned long ulOneMinuteTimer = 60 * 10000UL; // time in sec
+const int iSensorTimeout = 2; //minutes 
 
 // forward declarations
 void wifiConnectStation();
@@ -99,7 +102,7 @@ void setup()
   // Set timeout counter to maximum to provoke error on startup
   for (int n = 0; n < nMaxSensors; n++)
   {
-    sSensor[n].iSecSinceLastRead = iSensorTimeoutSec;
+    sSensor[n].iTimeSinceLastRead = iSensorTimeout;
   }
 
   // digitalWrite(LED_BUILTIN, ledState);
@@ -130,16 +133,12 @@ void loop()
     readJSONMessage();
     sendMQTTMessage();
   }
-  // Every second reading count up to detect timeout and then do not display
-  // counter goes up to iSensSerialTimeout if not reset during a sensor reading
+ 
   // also used to send MQTT error every interval
   if ((millis() - lSensorValidTime > ulOneSecondTimer))
   {
    
-    for (int n = 0; n < nMaxSensors; n++)
-    {
-      sSensor[n].iSecSinceLastRead++;
-    }
+   
      if (bLedState == LOW)
     {
       bLedState = HIGH;
@@ -155,6 +154,19 @@ void loop()
     //  will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
 
     lSensorValidTime = millis();
+  }
+
+   if ((millis() - lOneMinuteTime > ulOneMinuteTimer))
+  {
+
+    debugln("1 Minute");
+     // Every minute reading count up to detect timeout and then do not display
+  // counter goes up to iSensSerialTimeout if not reset during a sensor reading
+     for (int n = 0; n < nMaxSensors; n++)
+    {
+      sSensor[n].iTimeSinceLastRead++;
+    }
+    lOneMinuteTime = millis();
   }
 
   if ((millis() - lMQTTLoop > ulMQTTTimer))
@@ -236,7 +248,7 @@ void readJSONMessage()
     {
       // on successful reading set true and begin time from 0
       sSensor[iSensor].bSensorRec = true;
-      sSensor[iSensor].iSecSinceLastRead = 0;
+      sSensor[iSensor].iTimeSinceLastRead = 0;
     }
   }
 }
@@ -284,10 +296,10 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[0].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[0].iTimeSinceLastRead > iSensorTimeout)
         mqttClient.publish("SensorLoc/Err", "1");
       debugln("Error Sens0");
-      debugln(sSensor[0].iSecSinceLastRead);
+      debugln(sSensor[0].iTimeSinceLastRead);
     }
     // Sensor 1
     if (sSensor[1].bSensorRec == true)
@@ -303,11 +315,11 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[1].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[1].iTimeSinceLastRead > iSensorTimeout)
 
         // mqttClient.publish("Sensor1/Err", "1");
         debugln("Error Sens1");
-      debugln(sSensor[1].iSecSinceLastRead);
+      debugln(sSensor[1].iTimeSinceLastRead);
     }
     // Sensor 2
     if (sSensor[2].bSensorRec == true)
@@ -322,11 +334,11 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[2].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[2].iTimeSinceLastRead > iSensorTimeout)
       {
         //  mqttClient.publish("Sensor2/Err", "1");
         debugln("Error Sens2");
-        debugln(sSensor[2].iSecSinceLastRead);
+        debugln(sSensor[2].iTimeSinceLastRead);
       }
     }
     // Sensor 3
@@ -342,10 +354,10 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[3].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[3].iTimeSinceLastRead > iSensorTimeout)
         // mqttClient.publish("Sensor3/Err", "1");
         debugln("Error Sens3");
-      debugln(sSensor[3].iSecSinceLastRead);
+      debugln(sSensor[3].iTimeSinceLastRead);
     }
     // Sensor 4
     if (sSensor[4].bSensorRec == true)
@@ -362,10 +374,10 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[4].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[4].iTimeSinceLastRead > iSensorTimeout)
         //  mqttClient.publish("Sensor4/Err", "1");
         debugln("Error Sens4");
-      debugln(sSensor[4].iSecSinceLastRead);
+      debugln(sSensor[4].iTimeSinceLastRead);
     } // Sensor 5
     if (sSensor[5].bSensorRec == true)
     {
@@ -383,10 +395,10 @@ void sendMQTTMessage()
     }
     else
     {
-      if (sSensor[5].iSecSinceLastRead > iSensorTimeoutSec)
+      if (sSensor[5].iTimeSinceLastRead > iSensorTimeout)
         mqttClient.publish("Sensor5/Err", "1");
       debugln("Error Sens5");
-      debugln(sSensor[5].iSecSinceLastRead);
+      debugln(sSensor[5].iTimeSinceLastRead);
     }
   }
 }
