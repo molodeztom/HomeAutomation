@@ -63,14 +63,16 @@ struct SENSOR_DATA
     bool bSensorRec = false; //true when valid sensor data received in time frame
     //int iSensorCnt = 6;      //Counter for timeout no values after some time renamed
     bool bSensorRegistered = false; //true when sensor is first time received
-    int iSecSinceLastRead; //Seconds count up between sensor readings
+    int iSecSinceLastRead; //Seconds count up between sensor readings 0 if a new reading comes in, used for sensor data recieved over ESPNow
 };
-SENSOR_DATA sSensor0, sSensor1, sSensor2, sSensor3, sSensor4, sSensor5;
+//TODO remove single variables in favor of array
+//SENSOR_DATA sSensor0, sSensor1, sSensor2, sSensor3, sSensor4, sSensor5;
+SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 //Sensor 1: Breadboard, Sensor 2 Blau/Grau, sSensor3: Blau/Rot
 // Sensor reading timeout 
 long lSensorValidTime = 0;
-const unsigned long ulSensorValidIntervall = 60 * 1000UL; //time in sec
-const int SensValidMax = 5;                               //  times interval will make reading invalid 60*2 120 sec
+const unsigned long ulOneSecondTimer = 6 * 1000UL; //time in sec
+const int iSensorTimeoutSec = 5;              //  times interval will make reading invalid 60*x 120 sec. Used for recieving data over serial
 
 
 

@@ -11,7 +11,8 @@ receieve local sensor value from DS18B20
 History:
 20230130  V0.1: Initial version compiles not tested for function
 20230131  V0.2: + OTA
-20230131  V0.3: + use DEBUG macro 
+20230131  V0.3: + use DEBUG macro
+20230204  V0.4: c use arrays for sensor, LED Blink, use timers
 */
 
 #include <Arduino.h>
@@ -65,7 +66,11 @@ PubSubClient mqttClient(MQTT_client);
 static boolean recvInProgress = false;
 char cSerialRxIn[nMaxRxArray]; // Serial Rx Buffer
 bool newData = false;          // Flag RxData received
-bool bJsonOK = false;          // true if JSON could be decoded
+bool bLedState = false;
+
+// timing
+long lMQTTLoop = 0;
+const unsigned long ulMQTTTimer = 5 * 10000UL; // time in sec
 
 // forward declarations
 void wifiConnectStation();
@@ -92,7 +97,10 @@ void setup()
   }
   mqttClient.setServer(SERVER, SERVERPORT);
   // Set timeout counter to maximum to provoke error on startup
-  sSensor0.iSecSinceLastRead = SensValidMax;
+  for (int n = 0; n < nMaxSensors; n++)
+  {
+    sSensor[n].iSecSinceLastRead = iSensorTimeoutSec;
+  }
 
   // digitalWrite(LED_BUILTIN, ledState);
   ArduinoOTA.setHostname(MYHOSTNAME);
@@ -110,52 +118,56 @@ void loop()
   // Receive serial message from weather station
   // recvSerialwStartEndMarkers();
   ArduinoOTA.handle();
+#if DEBUG == 1
   showSerialRead();
-  mqttClient.loop(); // MQTT keep alive
-  // At least one sensor reading is available
+#endif
+  // mqttClient.loop(); // MQTT keep alive
+  //  At least one sensor reading is available
   if (newData)
   {
     newData = false;
+    debugln("New data arrived");
     readJSONMessage();
     sendMQTTMessage();
   }
-  // Every x seconds reading count up to detect timeout and then do not display
-  // counter goes up to SensValidMax if not reset during a sensor reading
+  // Every second reading count up to detect timeout and then do not display
+  // counter goes up to iSensSerialTimeout if not reset during a sensor reading
   // also used to send MQTT error every interval
-  if ((millis() - lSensorValidTime > ulSensorValidIntervall))
+  if ((millis() - lSensorValidTime > ulOneSecondTimer))
   {
-    sSensor0.iSecSinceLastRead++;
-    sSensor1.iSecSinceLastRead++;
-    sSensor2.iSecSinceLastRead++;
-    sSensor3.iSecSinceLastRead++;
-    // sSensor4.iSecSinceLastRead++;
-    sSensor5.iSecSinceLastRead++;
-    // will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
-    if (sSensor0.iSecSinceLastRead > SensValidMax)
+   
+    for (int n = 0; n < nMaxSensors; n++)
     {
-      sendMQTTMessage();
-
-      debugln("Sensor reading timeout");
+      sSensor[n].iSecSinceLastRead++;
     }
+     if (bLedState == LOW)
+    {
+      bLedState = HIGH;
+    }
+    else
+    {
+      bLedState = LOW;
+    }
+  
+  digitalWrite(LED_BUILTIN, bLedState);
+    //debugln("1 Second");
+    // TODO Sensor 4 was not incremented in original code
+    //  will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
+
     lSensorValidTime = millis();
   }
 
-  /*
-    //Upload Temperature Humidity to ThingSpeak
-  if(bJsonOK == true && (millis() - uploadTime > uploadInterval)){
-    uploadMeasurements();
-    uploadTime = millis();
-    debug("Upload Time: ");
-    debugln(uploadTime);
-
-    bJsonOK = false;
-    }
-    */
+  if ((millis() - lMQTTLoop > ulMQTTTimer))
+  {
+    mqttClient.loop(); // MQTT keep alive
+    debugln("MQTT Client loop");
+    lMQTTLoop = millis();
+  }
 
   //--------------------------blink part
 
   // unsigned long currentMillis = millis();
-  /*
+ /*
   if (currentMillis - previousMillis >= interval)
   {
     previousMillis = currentMillis;
@@ -171,24 +183,34 @@ void loop()
   digitalWrite(LED_BUILTIN, ledState);
   */
 }
-// Read JSON values from serial recieved message
+// Read JSON values bz name from serial recieved message
 void readJSONMessage()
 {
-  int iSensor;   // Sensor number
-  int iCheckSum; // temp variable to check values very simple method
+  int iSensor;         // Sensor number
+  int iCheckSumLocal;  // Checksum computed local
+  int iCheckSumRec;    // Checksum received serial
+  bool bError = false; // error handling
   DeserializationError err = deserializeJson(jsonDocument, cSerialRxIn);
   if (err)
   {
     debug(F("deserializeJson failed with code "));
     debugln(err.c_str());
-  }
-  else
+    bError = true;
+  };
+  if (bError == false)
   {
     // get single values from JSON to local values if not found set default value to recognize the problem
-    // common values for all sensors
+    // common values for all sensors even if a measurement is not supported
     iSensor = jsonDocument["sensor"] | InvalidMeasurement;
     if (iSensor < 0 || iSensor > 5)
-      iSensor = 99; // do not go into any switch case
+    {
+      debugln("sensor number out of range");
+      bError = true; // abort
+    }
+  }
+  if (bError == false)
+  {
+
 #ifdef DEBUG
     int serialCount; // displays a counter received from BaseStation
     serialCount = jsonDocument["time"];
@@ -196,116 +218,26 @@ void readJSONMessage()
     debugln(iSensor);
     debugln(serialCount);
 #endif
-    switch (iSensor)
+    sSensor[iSensor].fTempA = jsonDocument["fTempA"] | InvalidMeasurement;
+    sSensor[iSensor].fHumi = jsonDocument["fHumi"] | InvalidMeasurement;
+    sSensor[iSensor].fVolt = jsonDocument["fVolt"] | InvalidMeasurement;
+    sSensor[iSensor].iLight = jsonDocument["iLight"] | InvalidMeasurement;
+    sSensor[iSensor].fAtmo = jsonDocument["fAtmo"] | InvalidMeasurement;
+    sSensor[iSensor].fTempA = jsonDocument["fTempA"] | InvalidMeasurement;
+    iCheckSumRec = jsonDocument["iCSum"] | InvalidMeasurement;
+    iCheckSumLocal = sSensor[iSensor].fTempA + sSensor[iSensor].fHumi + sSensor[iSensor].fVolt + sSensor[iSensor].iLight + sSensor[iSensor].fAtmo;
+    if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
-    case 0:
-      sSensor0.iLight = jsonDocument["iLightLoc"] | InvalidMeasurement;
-      sSensor0.fAtmo = jsonDocument["fAtmoLoc"] | InvalidMeasurement;
-      iCheckSum = sSensor0.iLight + sSensor0.fAtmo;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor0.bSensorRec = true;
-        sSensor0.iSecSinceLastRead = 0;
-      }
-      break;
-    case 1:
-      sSensor1.fTempA = jsonDocument["fTemp1A"] | InvalidMeasurement;
-      sSensor1.fHumi = jsonDocument["fHumi1"] | InvalidMeasurement;
-      sSensor1.fVolt = jsonDocument["fVolt1"] | InvalidMeasurement;
-      iCheckSum = sSensor1.fTempA + sSensor1.fHumi + sSensor1.fVolt;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor1.bSensorRec = true;
-        sSensor1.iSecSinceLastRead = 0;
-      }
-      break;
-    case 2:
-      sSensor2.fTempA = jsonDocument["fTemp2A"] | InvalidMeasurement;
-      sSensor2.fVolt = jsonDocument["fVolt2"] | InvalidMeasurement;
-      iCheckSum = sSensor2.fTempA + sSensor2.fVolt;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor2.bSensorRec = true;
-        sSensor2.iSecSinceLastRead = 0;
-      }
-      break;
-    case 3:
-      sSensor3.fTempA = jsonDocument["fTemp3A"] | InvalidMeasurement;
-      sSensor3.fVolt = jsonDocument["fVolt3"] | InvalidMeasurement;
-      iCheckSum = sSensor3.fTempA + sSensor3.fVolt;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor3.bSensorRec = true;
-        sSensor3.iSecSinceLastRead = 0;
-      }
-
-      break;
-    case 4:
-      sSensor4.fTempA = jsonDocument["fTemp4A"] | InvalidMeasurement;
-      sSensor4.fHumi = jsonDocument["fHumi4"] | InvalidMeasurement;
-      sSensor4.fVolt = jsonDocument["fVolt4"] | InvalidMeasurement;
-      iCheckSum = sSensor4.fTempA + sSensor4.fHumi + sSensor4.fVolt;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor4.bSensorRec = true;
-        sSensor4.iSecSinceLastRead = 0;
-      }
-      break;
-    case 5:
-      sSensor5.fTempA = jsonDocument["fTemp5A"] | InvalidMeasurement;
-      sSensor5.fHumi = jsonDocument["fHumi5"] | InvalidMeasurement;
-      sSensor5.fVolt = jsonDocument["fVolt5"] | InvalidMeasurement;
-      iCheckSum = sSensor5.fTempA + sSensor5.fHumi + sSensor5.fVolt;
-      if (iCheckSum < InvalidMeasurement)
-      {
-        sSensor5.bSensorRec = true;
-        sSensor5.iSecSinceLastRead = 0;
-      }
-      break;
-
-    default:
-      debugln("Error: Sensor Nr recieved out of range");
-      break;
+      debug("Checksum Error: ");
+      debug(iCheckSumRec);
+      bError = true;
     }
-    bJsonOK = false;
-    /*
-#ifdef DEBUG
-    debugln("deserialized json document:");
-    debug("serialCount: ");
-    debugln(serialCount);
-    debug("TempLocal: ");
-    debugln(sSensor0.fTempA);
-    debug("HumiLocal ");
-    debugln(sSensor0.fHumi);
-    debug("LightLocal: ");
-    debugln(sSensor0.iLight);
-    debug("AtmoLoc: ");
-    debugln(sSensor0.fAtmo);
-    debug("Humi 1: ");
-    debugln(sSensor1.fHumi);
-    debug("Temp 1A: ");
-    debugln(sSensor1.fTempA);
-    debug("Batt 1: ");
-    debugln(sSensor1.fVolt);
-    debug("Temp 2A: ");
-    debugln(sSensor2.fTempA);
-    debug("Batt 2: ");
-    debugln(sSensor2.fVolt);
-    debug("Temp 3: ");
-    debugln(sSensor3.fTempA);
-    debug("Batt3: ");
-    debugln(sSensor3.fVolt);
-   #endif
-
-    debug("Temp 4A: ");
-    debugln(sSensor4.fTempA);
-    debug("Temp 4B: ");
-    debugln(sSensor4.fTempB);
-    debug("Batt 4: ");
-    debugln(sSensor4.fVolt);
-    debug("Humi 4: ");
-    debugln(sSensor4.fHumi);
-    */
+    else
+    {
+      // on successful reading set true and begin time from 0
+      sSensor[iSensor].bSensorRec = true;
+      sSensor[iSensor].iSecSinceLastRead = 0;
+    }
   }
 }
 
@@ -314,134 +246,148 @@ void readJSONMessage()
 void sendMQTTMessage()
 {
   char valueStr[20]; // helper to convert string to MQTT char
+  bool bError = false;
+  debugln("F: sendMQTT message");
   if (!mqttClient.connected())
   {
-
     debug("MQTT not connected, rc=");
     Serial.println(mqttClient.state());
     debugln("reconnect MQTT");
-
     // Attempt to connect
     if (mqttClient.connect("MQTT_CLIENTD", MQTT_USERNAME, MQTT_KEY))
     {
-
       debugln("MQTT connected");
     }
     else
     {
       debug("MQTT failed, rc=");
       Serial.println(mqttClient.state());
+      bError = true;
     }
   }
-
-  // Sensor Loc
-  if (sSensor0.bSensorRec == true)
+  if (bError == false)
   {
-
-    dtostrf(sSensor0.iLight, 3, 0, valueStr);
-    mqttClient.publish("SensorLoc/iLight", valueStr);
-    dtostrf(sSensor0.fAtmo, 4, 2, valueStr);
-    mqttClient.publish("SensorLoc/fAtmo", valueStr);
-    sSensor0.bSensorRec = false;
-
-    debugln("MQTT send SensorLoc");
-  }
-  else
-  {
-    if (sSensor0.iSecSinceLastRead > SensValidMax)
-      mqttClient.publish("SensorLoc/Err", "1");
-  }
-  // Sensor 1
-  if (sSensor1.bSensorRec == true)
-  {
-    dtostrf(sSensor1.fTempA, 4, 2, valueStr);
-    mqttClient.publish("Sensor1/fTempA", valueStr);
-    dtostrf(sSensor1.fVolt, 4, 2, valueStr);
-    mqttClient.publish("Sensor1/fVolt", valueStr);
-    dtostrf(sSensor1.fHumi, 4, 2, valueStr);
-    mqttClient.publish("Sensor1/fHumi", valueStr);
-    sSensor1.bSensorRec = false;
-
-    debugln("MQTT send Sensor1");
-  }
-  else
-  {
-    if (sSensor1.iSecSinceLastRead > SensValidMax)
-
-      mqttClient.publish("Sensor1/Err", "1");
-  }
-  // Sensor 2
-  if (sSensor2.bSensorRec == true)
-  {
-    dtostrf(sSensor2.fTempA, 4, 2, valueStr);
-    mqttClient.publish("Sensor2/fTempA", valueStr);
-    dtostrf(sSensor2.fVolt, 4, 2, valueStr);
-    mqttClient.publish("Sensor2/fVolt", valueStr);
-    sSensor2.bSensorRec = false;
-
-    debugln("MQTT send Sensor2");
-  }
-  else
-  {
-    if (sSensor2.iSecSinceLastRead > SensValidMax)
+    // TODO replace this by using an array and creating the MQTT channel names with a string operation
+    // TODO uncomment mqtt send
+    //  Sensor Loc
+    debugln("check for valid sensor readings");
+    if (sSensor[0].bSensorRec == true)
     {
-      mqttClient.publish("Sensor2/Err", "1");
-      debugln("Error Sens2");
-      debugln(sSensor2.iSecSinceLastRead);
+
+      dtostrf(sSensor[0].iLight, 3, 0, valueStr);
+      // mqttClient.publish("SensorLoc/iLight", valueStr);
+      dtostrf(sSensor[0].fAtmo, 4, 2, valueStr);
+      mqttClient.publish("SensorLoc/fAtmo", valueStr);
+      sSensor[0].bSensorRec = false;
+
+      debugln("MQTT send SensorLoc");
     }
-  }
-  // Sensor 3
-  if (sSensor3.bSensorRec == true)
-  {
-    dtostrf(sSensor3.fTempA, 4, 2, valueStr);
-    mqttClient.publish("Sensor3/fTempA", valueStr);
-    dtostrf(sSensor3.fVolt, 4, 2, valueStr);
-    mqttClient.publish("Sensor3/fVolt", valueStr);
-    sSensor3.bSensorRec = false;
+    else
+    {
+      if (sSensor[0].iSecSinceLastRead > iSensorTimeoutSec)
+        mqttClient.publish("SensorLoc/Err", "1");
+      debugln("Error Sens0");
+      debugln(sSensor[0].iSecSinceLastRead);
+    }
+    // Sensor 1
+    if (sSensor[1].bSensorRec == true)
+    {
+      dtostrf(sSensor[1].fTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor1/fTempA", valueStr);
+      dtostrf(sSensor[1].fVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor1/fVolt", valueStr);
+      dtostrf(sSensor[1].fHumi, 4, 2, valueStr);
+      mqttClient.publish("Sensor1/fHumi", valueStr);
+      sSensor[1].bSensorRec = false;
+      debugln("MQTT send Sensor1");
+    }
+    else
+    {
+      if (sSensor[1].iSecSinceLastRead > iSensorTimeoutSec)
 
-    debugln("MQTT send Sensor3");
-  }
-  else
-  {
-    if (sSensor3.iSecSinceLastRead > SensValidMax)
-      mqttClient.publish("Sensor3/Err", "1");
-  }
-  // Sensor 4
-  if (sSensor4.bSensorRec == true)
-  {
-    dtostrf(sSensor4.fTempA, 4, 2, valueStr);
-    mqttClient.publish("Sensor4/fTempA", valueStr);
-    dtostrf(sSensor4.fTempB, 4, 2, valueStr);
-    mqttClient.publish("Sensor4/fTempB", valueStr);
-    dtostrf(sSensor4.fVolt, 4, 2, valueStr);
-    mqttClient.publish("Sensor4/fVolt", valueStr);
-    sSensor4.bSensorRec = false;
+        // mqttClient.publish("Sensor1/Err", "1");
+        debugln("Error Sens1");
+      debugln(sSensor[1].iSecSinceLastRead);
+    }
+    // Sensor 2
+    if (sSensor[2].bSensorRec == true)
+    {
+      dtostrf(sSensor[2].fTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor2/fTempA", valueStr);
+      dtostrf(sSensor[2].fVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor2/fVolt", valueStr);
+      sSensor[2].bSensorRec = false;
 
-    debugln("MQTT send Sensor4");
-  }
-  else
-  {
-    if (sSensor4.iSecSinceLastRead > SensValidMax)
-      mqttClient.publish("Sensor4/Err", "1");
-  } // Sensor 5
-  if (sSensor5.bSensorRec == true)
-  {
-    dtostrf(sSensor5.fTempA, 4, 2, valueStr);
-    mqttClient.publish("Sensor5/fTempA", valueStr);
-    dtostrf(sSensor5.fTempB, 4, 2, valueStr);
-    mqttClient.publish("Sensor5/fTempB", valueStr);
-    dtostrf(sSensor5.fVolt, 4, 2, valueStr);
-    mqttClient.publish("Sensor5/fVolt", valueStr);
-    dtostrf(sSensor5.fHumi, 4, 2, valueStr);
-    mqttClient.publish("Sensor5/fHumi", valueStr);
-    sSensor5.bSensorRec = false;
+      debugln("MQTT send Sensor2");
+    }
+    else
+    {
+      if (sSensor[2].iSecSinceLastRead > iSensorTimeoutSec)
+      {
+        //  mqttClient.publish("Sensor2/Err", "1");
+        debugln("Error Sens2");
+        debugln(sSensor[2].iSecSinceLastRead);
+      }
+    }
+    // Sensor 3
+    if (sSensor[3].bSensorRec == true)
+    {
+      dtostrf(sSensor[3].fTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor3/fTempA", valueStr);
+      dtostrf(sSensor[3].fVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor3/fVolt", valueStr);
+      sSensor[3].bSensorRec = false;
 
-    debugln("MQTT send Sensor5");
-  }
-  else
-  {
-    if (sSensor5.iSecSinceLastRead > SensValidMax)
-      mqttClient.publish("Sensor5/Err", "1");
+      debugln("MQTT send Sensor3");
+    }
+    else
+    {
+      if (sSensor[3].iSecSinceLastRead > iSensorTimeoutSec)
+        // mqttClient.publish("Sensor3/Err", "1");
+        debugln("Error Sens3");
+      debugln(sSensor[3].iSecSinceLastRead);
+    }
+    // Sensor 4
+    if (sSensor[4].bSensorRec == true)
+    {
+      dtostrf(sSensor[4].fTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/fTempA", valueStr);
+      dtostrf(sSensor[4].fTempB, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/fTempB", valueStr);
+      dtostrf(sSensor[4].fVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/fVolt", valueStr);
+      sSensor[4].bSensorRec = false;
+
+      debugln("MQTT send Sensor4");
+    }
+    else
+    {
+      if (sSensor[4].iSecSinceLastRead > iSensorTimeoutSec)
+        //  mqttClient.publish("Sensor4/Err", "1");
+        debugln("Error Sens4");
+      debugln(sSensor[4].iSecSinceLastRead);
+    } // Sensor 5
+    if (sSensor[5].bSensorRec == true)
+    {
+      dtostrf(sSensor[5].fTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor5/fTempA", valueStr);
+      dtostrf(sSensor[5].fTempB, 4, 2, valueStr);
+      mqttClient.publish("Sensor5/fTempB", valueStr);
+      dtostrf(sSensor[5].fVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor5/fVolt", valueStr);
+      dtostrf(sSensor[5].fHumi, 4, 2, valueStr);
+      mqttClient.publish("Sensor5/fHumi", valueStr);
+      sSensor[5].bSensorRec = false;
+
+      debugln("MQTT send Sensor5");
+    }
+    else
+    {
+      if (sSensor[5].iSecSinceLastRead > iSensorTimeoutSec)
+        mqttClient.publish("Sensor5/Err", "1");
+      debugln("Error Sens5");
+      debugln(sSensor[5].iSecSinceLastRead);
+    }
   }
 }
 
