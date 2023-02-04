@@ -70,10 +70,12 @@ bool bLedState = false;
 
 // timing
 long lMQTTLoop = 0;
-const unsigned long ulMQTTTimer = 5 * 10000UL; // time in sec
+const unsigned long ulMQTTTimer = 5 * 1000UL; // time in sec
 long lOneMinuteTime = 0;
-const unsigned long ulOneMinuteTimer = 60 * 10000UL; // time in sec
-const int iSensorTimeout = 2; //minutes 
+const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec
+const int iSensorTimeout = 3; //minutes 
+long lSecondsTime = 0;
+const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 
 // forward declarations
 void wifiConnectStation();
@@ -119,7 +121,7 @@ void loop()
   // static unsigned long previousMillis = 0; //for blink
   // const long interval = 500;
   // Receive serial message from weather station
-  // recvSerialwStartEndMarkers();
+  recvSerialwStartEndMarkers();
   ArduinoOTA.handle();
 #if DEBUG == 1
   showSerialRead();
@@ -135,8 +137,9 @@ void loop()
   }
  
   // also used to send MQTT error every interval
-  if ((millis() - lSensorValidTime > ulOneSecondTimer))
+ if ((millis() - lSecondsTime > ulSecondsInterval))
   {
+  
    
    
      if (bLedState == LOW)
@@ -153,7 +156,7 @@ void loop()
     // TODO Sensor 4 was not incremented in original code
     //  will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
 
-    lSensorValidTime = millis();
+    lSecondsTime = millis();
   }
 
    if ((millis() - lOneMinuteTime > ulOneMinuteTimer))
@@ -287,9 +290,9 @@ void sendMQTTMessage()
     {
 
       dtostrf(sSensor[0].iLight, 3, 0, valueStr);
-      // mqttClient.publish("SensorLoc/iLight", valueStr);
+      //mqttClient.publish("SensorLoc/iLight", valueStr);
       dtostrf(sSensor[0].fAtmo, 4, 2, valueStr);
-      mqttClient.publish("SensorLoc/fAtmo", valueStr);
+      //mqttClient.publish("SensorLoc/fAtmo", valueStr);
       sSensor[0].bSensorRec = false;
 
       debugln("MQTT send SensorLoc");
@@ -297,7 +300,7 @@ void sendMQTTMessage()
     else
     {
       if (sSensor[0].iTimeSinceLastRead > iSensorTimeout)
-        mqttClient.publish("SensorLoc/Err", "1");
+      //  mqttClient.publish("SensorLoc/Err", "1");
       debugln("Error Sens0");
       debugln(sSensor[0].iTimeSinceLastRead);
     }
@@ -396,7 +399,7 @@ void sendMQTTMessage()
     else
     {
       if (sSensor[5].iTimeSinceLastRead > iSensorTimeout)
-        mqttClient.publish("Sensor5/Err", "1");
+      mqttClient.publish("Sensor5/Err", "1");
       debugln("Error Sens5");
       debugln(sSensor[5].iTimeSinceLastRead);
     }

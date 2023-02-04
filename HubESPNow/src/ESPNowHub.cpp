@@ -568,6 +568,7 @@ void readAtmosphere()
 {
   sSensor[0].fAtmo = bmp.readPressure();
   sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
+   sSensor[0].bSensorRec = true;
 #if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
