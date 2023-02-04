@@ -70,7 +70,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.26";
+const String sSoftware = "HubESPNow V0.27";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -478,6 +478,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
+    sSensor[iChannelNr].bSensorRec = true;
     if (sSensor[iLastReceivedChannel].bSensorRegistered == false)
     {
       // do this only on very first packet of a sensor
@@ -525,6 +526,8 @@ int iCheckSum = 0;
     {
       // Sensor n recieved something
       // checksum is computed at reciever as well
+      debug("Send Sensor Nr.: ");
+      debugln(n);
       iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt+ sSensor[n].iLight + sSensor[n].fAtmo;
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
