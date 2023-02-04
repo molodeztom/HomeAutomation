@@ -37,7 +37,8 @@ History:
 20230128  V0.22:  +Display information when sensor connects first time
 20230129  V0.23:  c clean up code check release compilation
 20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
-20340129  V0.25:  +serial communication to ESPWLAN
+20230129  V0.25:  +serial communication to ESPWLAN
+20230204  V0.26:  c timing, HW Led blink
 
  */
 #include <Arduino.h>
@@ -69,7 +70,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.25";
+const String sSoftware = "HubESPNow V0.26";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -127,6 +128,9 @@ int iLastReceivedChannel = 0;
 // Timing seconds for various uses
 long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
+const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec TIMER
+
+const int iSensorTimeout = 2;  
 
 // program is running on one of these modes
 // normal, AP Open to add a new sensor, OTA only active to do an OTA
@@ -194,6 +198,8 @@ const int SCL_PIN = D1; // GPIO5
 // const int SDA_PIN = D3; //GPIO0
 // const int SCL_PIN = D4; //GPIO2
 
+bool bLedState = false;
+
 // Initialize the oled display for address 0x3c
 SSD1306Wire display(0x3c, SDA_PIN, SCL_PIN);
 long lsUpdateDisplay = 0;                                   // Timing
@@ -230,6 +236,8 @@ void setup()
   swSer.begin(swBAUD_RATE); // SW port for serial communication
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
+
+ digitalWrite(LED_BUILTIN, LOW);
   ProgramMode = normal;
   // WIFI ESPNOW
   WiFi.persistent(false); // https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -354,6 +362,7 @@ void loop()
     {
       sSecondsUntilClose--;
     }
+    // digitalWrite(LED_BUILTIN, HIGH);
     lSecondsTime = millis();
   }
 
@@ -431,12 +440,12 @@ void loop()
   }
 
   // Every second check sensor readings, if no reading count up and then do not display
-  if ((millis() - lSensorValidTime > ulOneSecondTimer))
+  if ((millis() - lSensorValidTime > ulOneMinuteTimer))
   {
     //
     for (int n = 0; n < nMaxSensors; n++)
     {
-      sSensor[n].iSecSinceLastRead++;
+      sSensor[n].iTimeSinceLastRead++;
     }
     lSensorValidTime = millis();
   }
@@ -457,6 +466,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   int iChannelNr;
   int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
+   digitalWrite(LED_BUILTIN, HIGH);
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   iChannelNr = sESPReceive.iSensorChannel;
   iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
@@ -466,8 +476,8 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
-    iLastSSinceLastRead = sSensor[iChannelNr].iSecSinceLastRead; // remember for display
-    sSensor[iChannelNr].iSecSinceLastRead = 0;
+    iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
+    sSensor[iChannelNr].iTimeSinceLastRead = 0;
     if (sSensor[iLastReceivedChannel].bSensorRegistered == false)
     {
       // do this only on very first packet of a sensor
@@ -609,14 +619,15 @@ void formatTempExt()
 
   for (int n = 0; n < nMaxSensors; n++)
   {
-    if ((sSensor[n].iSecSinceLastRead > iSensorTimeoutSec) || (sSensor[n].bSensorRegistered == false))
+    if ((sSensor[n].iTimeSinceLastRead > iSensorTimeout) || (sSensor[n].bSensorRegistered == false))
     {
       // kein Sensor gefunden
       debug("Sensor Nr.: ");
       debugln(n);
       debug("channel: ");
       debugln(sSensor[n].iSensorChannel);
-      debugln(" no sensor data received");
+      debugln(" no sensor data received since ");
+      debugln(sSensor[n].iTimeSinceLastRead);
       textSensTemp[n] = "----------";
     }
     else
