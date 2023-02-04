@@ -71,7 +71,7 @@ extern "C"
 
 const String sSoftware = "HubESPNow V0.25";
 
-SENSOR_DATA sSensor[nMaxSensors]; // SensValidMax in HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
+// Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
 // debug macro
 #if DEBUG == 1
@@ -431,7 +431,7 @@ void loop()
   }
 
   // Every second check sensor readings, if no reading count up and then do not display
-  if ((millis() - lSensorValidTime > ulSensorValidIntervall))
+  if ((millis() - lSensorValidTime > ulOneSecondTimer))
   {
     //
     for (int n = 0; n < nMaxSensors; n++)
@@ -501,10 +501,12 @@ void sendDataToMainStation()
 {
 // serialize Sensor Data to json and send using sw serial connection
 // only send sensor data when recently a sensor sent something
+// For all sensor we send all data even if sensor does not support something
 // Allocate JsonBuffer TODO calculate new JsonBuffer size
 #ifdef DEBUG
   char output[256];
 #endif
+int iCheckSum = 0;
   StaticJsonDocument<capacity> jsonDocument;
   // change to array
   for (int n = 0; n < nMaxSensors; n++)
@@ -512,7 +514,8 @@ void sendDataToMainStation()
     if (sSensor[n].bSensorRec == true)
     {
       // Sensor n recieved something
-      // TODO this is Sensor 5 as an example add all other values
+      // checksum is computed at reciever as well
+      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt+ sSensor[n].iLight + sSensor[n].fAtmo;
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
@@ -521,6 +524,7 @@ void sendDataToMainStation()
       jsonDocument["fVolt"] = sSensor[n].fVolt;
       jsonDocument["iLight"] = sSensor[n].iLight;
       jsonDocument["fAtmo"] = sSensor[n].fAtmo;
+      jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
       serializeJson(jsonDocument, swSer);
@@ -599,13 +603,13 @@ create string for display output
 Local sensor has no recieve timeout */
 void formatTempExt()
 {
-  // if sensor not updated within time SensValidMax is reached and no value displayed
+  // if sensor not updated within time iSensTimeout is reached and no value displayed
   // and sensor has a valid first reading
   debugln("formatTempExt");
 
   for (int n = 0; n < nMaxSensors; n++)
   {
-    if ((sSensor[n].iSecSinceLastRead > SensValidMax) || (sSensor[n].bSensorRegistered == false))
+    if ((sSensor[n].iSecSinceLastRead > iSensorTimeoutSec) || (sSensor[n].bSensorRegistered == false))
     {
       // kein Sensor gefunden
       debug("Sensor Nr.: ");
