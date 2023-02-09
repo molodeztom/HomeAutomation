@@ -39,7 +39,9 @@ History:
 20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
 20230129  V0.25:  +serial communication to ESPWLAN
 20230204  V0.26:  c timing, HW Led blink
-20230205  V0.27:  c send values with less resolution
+20230205  V0.27:  c send values with less resolution /Branch Float Tests
+20230209  V0.28:  c use int instead of float where possible to avoid loosing precision
+
 
  */
 #include <Arduino.h>
@@ -97,14 +99,6 @@ const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 
 const float fTempCorr[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // struct for exchanging data over ESP NOW
-struct DATEN_STRUKTUR
-{
-  int iSensorChannel = 99;  // default for none received
-  float fESPNowTempA = -99; // Aussen A
-  float fESPNowTempB = -99; // Aussen B
-  float fESPNowHumi = -99;
-  float fESPNowVolt = -99; // Batterie Sensor
-};
 
 /***************************
  * Serial Communication Settings
@@ -464,7 +458,7 @@ void loop()
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 {
 
-  DATEN_STRUKTUR sESPReceive;
+  ESPNOW_DATA_STRUCTURE sESPReceive;
   int iChannelNr;
   int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
@@ -478,32 +472,16 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     // TODO remove test
     // Test ohne Rundung
     //   dtostrf(sSensor[n].fTempA, 4, 2, valueStr);
-   // sSensor[iChannelNr].fTempA = sESPReceive.fESPNowTempA + fTempCorr[iChannelNr];
+    // sSensor[iChannelNr].fTempA = sESPReceive.fESPNowTempA + fTempCorr[iChannelNr];
     //  sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / (float)100;
-    debugln("recieved raw first 20 bytes: " );
-for(int i=0;i < 30; i++){
-  Serial.printf("%x", r_data[i]);
-}
-debugln("END");
 
-  
+    // TODO now recieve sensor TempA and instantly convert to int
     debugln("received raw TempA: ");
-    Serial.println(sESPReceive.fESPNowTempA,7);
-    
+    Serial.println(sESPReceive.fESPNowTempA, 7);
+    int iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
+    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
+    ;
 
-   
-    debugln(("*100 roundf: "));
-    Serial.println(roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100), 10);
-    debugln("/100: ");
-    Serial.println(roundf((float)(sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / (float)100, 10); 
-    //float num = 123.456834945;
-    float rounded_num = round_to_2_decimal_places(sESPReceive.fESPNowTempA);
-    Serial.println("rounded_num");
-    Serial.println(rounded_num,10);
-
-    debugln("sSensor[].fTempA: ");
-    Serial.println(sSensor[iChannelNr].fTempA, 10);
-     sSensor[iChannelNr].fTempA = rounded_num;
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -560,18 +538,19 @@ void sendDataToMainStation()
       debug("Send Sensor Nr.: ");
       debugln(n);
       // TODO test remove
-      dtostrf(sSensor[n].fTempA, 4, 5, valueStr);
+      // dtostrf((sSensor[n].fTempA)/10, 4, 5, valueStr);
       debugln("Serial print");
       Serial.println(sSensor[n].fTempA, 10);
-      debugln("dtostrf print");
-      Serial.println(valueStr);
-
+      //  debugln("dtostrf print");
+      //  Serial.println(valueStr);
+      // Checksum with 100 times values
       iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt + sSensor[n].iLight + sSensor[n].fAtmo;
+      debugln("checksum: ");
       debugln(iCheckSum);
+      // json with real values
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
-     // jsonDocument["fTempA"] = valueStr;
       jsonDocument["fTempA"] = sSensor[n].fTempA;
       jsonDocument["fHumi"] = sSensor[n].fHumi;
       jsonDocument["fVolt"] = sSensor[n].fVolt;
@@ -580,19 +559,19 @@ void sendDataToMainStation()
       jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
-            serializeJson(jsonDocument, output);
+      serializeJson(jsonDocument, output);
 
-      //serializeJson(jsonDocument, swSer);
+      // serializeJson(jsonDocument, swSer);
       swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);
-            Serial.println(output);
-      memset(&output, 0, 256);
-/* #ifdef DEBUG
-      serializeJson(jsonDocument, output);
       Serial.println(output);
       memset(&output, 0, 256);
-#endif */
+      /* #ifdef DEBUG
+            serializeJson(jsonDocument, output);
+            Serial.println(output);
+            memset(&output, 0, 256);
+      #endif */
     }
   }
 }
@@ -681,9 +660,24 @@ void formatTempExt()
     }
     else
     {
-     //by default to  
-      textSensTemp[n] = String(sSensor[n].fTempA, 2U) + " °C";
-
+      // by default to
+      char strTest[22];
+      debugln("sSensor.fTempA: ");
+      Serial.println(sSensor[n].fTempA, 10);
+       int iTest = sSensor[n].fTempA;
+   /*   float fTest = ((sSensor[n].fTempA) / 100);
+      debugln("float: ");
+      Serial.println(fTest, 3);
+      sprintf(strTest, "%.2f", fTest);
+      debugln("sprintf: ");
+      sprintf(strTest, "Value = %.3f °C", fTest);
+      debugln("sprintf:%i.. "); */
+      sprintf(strTest, "%i.%02i", iTest / 100, abs(iTest) % 100);
+/*       debugln(strTest);
+             dtostrf(fTest,2,1,&strTest[strlen(strTest)]);
+         debugln("dtostrf"); */
+      Serial.println(strTest);
+      textSensTemp[n] = strTest;
     }
   }
 }
@@ -802,33 +796,34 @@ void macAddrToString(byte *mac, char *str)
   str[-1] = '\0';
 }
 
-float round_to_2_decimal_places(float num) {
+float round_to_2_decimal_places(float num)
+{
   debugln("new in round to :");
-  Serial.println(num,7);
+  Serial.println(num, 7);
   int dp = 3;
   int charsNeeded = 1 + snprintf(NULL, 0, "%.*f", dp, num);
-    char *buffer = (char*)malloc(charsNeeded);
-    snprintf(buffer, charsNeeded, "%.*f", dp, num);
-    Serial.println(charsNeeded);
-    Serial.println(buffer);
-    double result = atof(buffer);
-    Serial.println(result, charsNeeded);
- 
-    free(buffer);
-debugln("Test mit +0.5 ");
-float rounded = ((int)(num * 100 + .5) / 100.0);
-Serial.println(rounded,7);
+  char *buffer = (char *)malloc(charsNeeded);
+  snprintf(buffer, charsNeeded, "%.*f", dp, num);
+  Serial.println(charsNeeded);
+  Serial.println(buffer);
+  double result = atof(buffer);
+  Serial.println(result, charsNeeded);
 
-    Serial.println("Test mit Zahl 12.4567");
-    float test = 12.12345645678901234567890123456789012343;
-    Serial.println(test, 35);
-    Serial.println(test);
-    test = 12.456;
-    Serial.println(test, 20);
-    Serial.println(test);
-    test = 12.12345678901239901234567890123456789012343;
-    Serial.println(test, 20);
-    Serial.println(test);
+  free(buffer);
+  debugln("Test mit +0.5 ");
+  float rounded = ((int)(num * 100 + .5) / 100.0);
+  Serial.println(rounded, 7);
+
+  Serial.println("Test mit Zahl 12.4567");
+  float test = 12.12345645678901234567890123456789012343;
+  Serial.println(test, 35);
+  Serial.println(test);
+  test = 12.456;
+  Serial.println(test, 20);
+  Serial.println(test);
+  test = 12.12345678901239901234567890123456789012343;
+  Serial.println(test, 20);
+  Serial.println(test);
 
   return result;
 }

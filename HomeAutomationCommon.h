@@ -49,10 +49,22 @@ const int httpPort = 80;
  **************************/
 const float InvalidMeasurement = 9999; //value set when a value was not correctly received via serial and JSON
 const int nMaxSensors = 10; //max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
+//used for ESP Now Data protocol same for sensors and ESPNowHub
+struct ESPNOW_DATA_STRUCTURE
+{
+  int iSensorChannel = 99;  // default for none received
+  float fESPNowTempA = -99; // Aussen A
+  float fESPNowTempB = -99; // Aussen B
+  float fESPNowHumi = -99;
+  float fESPNowVolt = -99; // Batterie Sensor
+};
+
+
+//used for local storage in ESPNowHub
 struct SENSOR_DATA
 {
     int iSensorChannel = nMaxSensors +1;
-    float fTempA = InvalidMeasurement;
+    int fTempA = InvalidMeasurement;
     float fTempB = InvalidMeasurement;
     float fTempC = InvalidMeasurement;
     float fHumi = InvalidMeasurement;
