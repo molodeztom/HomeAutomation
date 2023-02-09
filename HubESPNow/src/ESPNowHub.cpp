@@ -4,9 +4,9 @@ Hardware:
 ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display
 and div sensors
 Software:
-One ESP with ESPNowHub and one with ESPWLANHub firmware needed. 
+One ESP with ESPNowHub and one with ESPWLANHub firmware needed.
 Functions:
-Display sensor values on OLED 
+Display sensor values on OLED
 Get internal sensor values from light sensor and BMP 180 air pressure
 Receive external sensor values using ESP-Now protocol
 Send sensor values as JSON over serial interface to ESPWLANHub
@@ -39,6 +39,7 @@ History:
 20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
 20230129  V0.25:  +serial communication to ESPWLAN
 20230204  V0.26:  c timing, HW Led blink
+20230205  V0.27:  c send values with less resolution
 
  */
 #include <Arduino.h>
@@ -130,7 +131,7 @@ long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec TIMER
 
-const int iSensorTimeout = 2;  
+const int iSensorTimeout = 2;
 
 // program is running on one of these modes
 // normal, AP Open to add a new sensor, OTA only active to do an OTA
@@ -216,6 +217,7 @@ void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
 void sendDataToMainStation();
+float round_to_2_decimal_places(float num);
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -237,7 +239,7 @@ void setup()
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
 
- digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, LOW);
   ProgramMode = normal;
   // WIFI ESPNOW
   WiFi.persistent(false); // https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -466,14 +468,42 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   int iChannelNr;
   int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
-   digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(LED_BUILTIN, LOW);
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   iChannelNr = sESPReceive.iSensorChannel;
   iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
   // depending on channel fill values. 0 is local sensor and not used here
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
-    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
+    // TODO remove test
+    // Test ohne Rundung
+    //   dtostrf(sSensor[n].fTempA, 4, 2, valueStr);
+   // sSensor[iChannelNr].fTempA = sESPReceive.fESPNowTempA + fTempCorr[iChannelNr];
+    //  sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / (float)100;
+    debugln("recieved raw first 20 bytes: " );
+for(int i=0;i < 30; i++){
+  Serial.printf("%x", r_data[i]);
+}
+debugln("END");
+
+  
+    debugln("received raw TempA: ");
+    Serial.println(sESPReceive.fESPNowTempA,7);
+    
+
+   
+    debugln(("*100 roundf: "));
+    Serial.println(roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100), 10);
+    debugln("/100: ");
+    Serial.println(roundf((float)(sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / (float)100, 10); 
+    //float num = 123.456834945;
+    float rounded_num = round_to_2_decimal_places(sESPReceive.fESPNowTempA);
+    Serial.println("rounded_num");
+    Serial.println(rounded_num,10);
+
+    debugln("sSensor[].fTempA: ");
+    Serial.println(sSensor[iChannelNr].fTempA, 10);
+     sSensor[iChannelNr].fTempA = rounded_num;
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -517,7 +547,8 @@ void sendDataToMainStation()
 #ifdef DEBUG
   char output[256];
 #endif
-int iCheckSum = 0;
+  int iCheckSum = 0;
+  char valueStr[20];
   StaticJsonDocument<capacity> jsonDocument;
   // change to array
   for (int n = 0; n < nMaxSensors; n++)
@@ -528,10 +559,19 @@ int iCheckSum = 0;
       // checksum is computed at reciever as well
       debug("Send Sensor Nr.: ");
       debugln(n);
-      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt+ sSensor[n].iLight + sSensor[n].fAtmo;
+      // TODO test remove
+      dtostrf(sSensor[n].fTempA, 4, 5, valueStr);
+      debugln("Serial print");
+      Serial.println(sSensor[n].fTempA, 10);
+      debugln("dtostrf print");
+      Serial.println(valueStr);
+
+      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt + sSensor[n].iLight + sSensor[n].fAtmo;
+      debugln(iCheckSum);
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
+     // jsonDocument["fTempA"] = valueStr;
       jsonDocument["fTempA"] = sSensor[n].fTempA;
       jsonDocument["fHumi"] = sSensor[n].fHumi;
       jsonDocument["fVolt"] = sSensor[n].fVolt;
@@ -540,14 +580,19 @@ int iCheckSum = 0;
       jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
-      serializeJson(jsonDocument, swSer);
+            serializeJson(jsonDocument, output);
+
+      //serializeJson(jsonDocument, swSer);
+      swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);
-#ifdef DEBUG
+            Serial.println(output);
+      memset(&output, 0, 256);
+/* #ifdef DEBUG
       serializeJson(jsonDocument, output);
       Serial.println(output);
       memset(&output, 0, 256);
-#endif
+#endif */
     }
   }
 }
@@ -568,7 +613,7 @@ void readAtmosphere()
 {
   sSensor[0].fAtmo = bmp.readPressure();
   sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
-   sSensor[0].bSensorRec = true;
+  sSensor[0].bSensorRec = true;
 #if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
@@ -636,7 +681,9 @@ void formatTempExt()
     }
     else
     {
-      textSensTemp[n] = String(sSensor[n].fTempA) + " °C";
+     //by default to  
+      textSensTemp[n] = String(sSensor[n].fTempA, 2U) + " °C";
+
     }
   }
 }
@@ -753,4 +800,35 @@ void macAddrToString(byte *mac, char *str)
   }
   // replace the final colon with a nul terminator
   str[-1] = '\0';
+}
+
+float round_to_2_decimal_places(float num) {
+  debugln("new in round to :");
+  Serial.println(num,7);
+  int dp = 3;
+  int charsNeeded = 1 + snprintf(NULL, 0, "%.*f", dp, num);
+    char *buffer = (char*)malloc(charsNeeded);
+    snprintf(buffer, charsNeeded, "%.*f", dp, num);
+    Serial.println(charsNeeded);
+    Serial.println(buffer);
+    double result = atof(buffer);
+    Serial.println(result, charsNeeded);
+ 
+    free(buffer);
+debugln("Test mit +0.5 ");
+float rounded = ((int)(num * 100 + .5) / 100.0);
+Serial.println(rounded,7);
+
+    Serial.println("Test mit Zahl 12.4567");
+    float test = 12.12345645678901234567890123456789012343;
+    Serial.println(test, 35);
+    Serial.println(test);
+    test = 12.456;
+    Serial.println(test, 20);
+    Serial.println(test);
+    test = 12.12345678901239901234567890123456789012343;
+    Serial.println(test, 20);
+    Serial.println(test);
+
+  return result;
 }
