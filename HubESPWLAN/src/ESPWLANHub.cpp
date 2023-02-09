@@ -27,7 +27,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.3";
+const String sSoftware = "ESPWLANHub V0.4";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -70,7 +70,7 @@ bool bLedState = false;
 
 // timing
 long lMQTTLoop = 0;
-const unsigned long ulMQTTTimer = 5 * 1000UL; // time in sec
+const unsigned long ulMQTTTimer = 3 * 1000UL; // time in sec
 long lOneMinuteTime = 0;
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec
 const int iSensorTimeout = 3; //minutes 
@@ -101,6 +101,7 @@ void setup()
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
   mqttClient.setServer(SERVER, SERVERPORT);
+  mqttClient.setKeepAlive(60);
   // Set timeout counter to maximum to provoke error on startup
   for (int n = 0; n < nMaxSensors; n++)
   {
@@ -175,9 +176,10 @@ void loop()
   if ((millis() - lMQTTLoop > ulMQTTTimer))
   {
     mqttClient.loop(); // MQTT keep alive
-    debugln("MQTT Client loop");
+    //debugln("MQTT loop");
     lMQTTLoop = millis();
   }
+  mqttClient.loop();
 
   //--------------------------blink part
 
