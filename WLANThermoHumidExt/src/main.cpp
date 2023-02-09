@@ -82,6 +82,7 @@ int cntSens = 0;                  //Anzahl Sensoren
 DHT dht(DHTPIN, DHTTYPE);
 
 //Datenstruktur für den Datenaustausch
+//TODO: change to ESPNOW_DATA_STRUCTURE from HomeAutomationCommon.h
 struct DATEN_STRUKTUR
 {
   int chan = CHAN;
