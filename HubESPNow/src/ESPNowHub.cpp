@@ -4,9 +4,9 @@ Hardware:
 ESPNowHub V1.0 and CTRL Board V1 with external OLEDD display
 and div sensors
 Software:
-One ESP with ESPNowHub and one with ESPWLANHub firmware needed. 
+One ESP with ESPNowHub and one with ESPWLANHub firmware needed.
 Functions:
-Display sensor values on OLED 
+Display sensor values on OLED
 Get internal sensor values from light sensor and BMP 180 air pressure
 Receive external sensor values using ESP-Now protocol
 Send sensor values as JSON over serial interface to ESPWLANHub
@@ -39,6 +39,10 @@ History:
 20230129  V0.24:  b fixed 99999 display for temp, better switch reaction time
 20230129  V0.25:  +serial communication to ESPWLAN
 20230204  V0.26:  c timing, HW Led blink
+20230205  V0.27:  c send values with less resolution /Branch Float Tests
+20230209  V0.28:  c use int instead of float where possible to avoid loosing precision
+20230211  V0.29:  c remove unneeded debug functions, use char[] instead of string
+
 
  */
 #include <Arduino.h>
@@ -70,7 +74,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.27";
+const String sSoftware = "HubESPNow V0.29";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -96,14 +100,6 @@ const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 
 const float fTempCorr[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // struct for exchanging data over ESP NOW
-struct DATEN_STRUKTUR
-{
-  int iSensorChannel = 99;  // default for none received
-  float fESPNowTempA = -99; // Aussen A
-  float fESPNowTempB = -99; // Aussen B
-  float fESPNowHumi = -99;
-  float fESPNowVolt = -99; // Batterie Sensor
-};
 
 /***************************
  * Serial Communication Settings
@@ -119,7 +115,8 @@ const unsigned long ulSendIntervall = 15 * 1000UL; // Upload to home server ever
 SoftwareSerial swSer(D9, D7, false);
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
-String textSensTemp[nMaxSensors];
+
+char textSensTemp[nMaxSensors][22];
 String sNewSensorChannel;
 String sNewSensorMAC;
 bool bNewSensorFound = false;
@@ -130,7 +127,7 @@ long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec TIMER
 
-const int iSensorTimeout = 2;  
+const int iSensorTimeout = 2;
 
 // program is running on one of these modes
 // normal, AP Open to add a new sensor, OTA only active to do an OTA
@@ -149,8 +146,7 @@ bool bOTARunning = false; // true if OTA already running to prevent stop
 // SSID Open for some time. Sensors can contact AP to connect. After that time sensor use stored MAC adress
 long lAPOpenTime = 0;       // Timing
 int sSecondsUntilClose = 0; // counter to display how long still open
-// TODO: set back to 240 sec
-const unsigned long ulAPOpenInterval = 90 * 1000UL; // time in sec TIMER
+const unsigned long ulAPOpenInterval = 120 * 1000UL; // time in sec TIMER
 
 // ESP Now
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
@@ -217,6 +213,7 @@ void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
 void sendDataToMainStation();
 
+
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
  **************************/
@@ -237,7 +234,7 @@ void setup()
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
 
- digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, LOW);
   ProgramMode = normal;
   // WIFI ESPNOW
   WiFi.persistent(false); // https://www.arduinoforum.de/arduino-Thread-Achtung-ESP8266-schreibt-bei-jedem-wifi-begin-in-Flash
@@ -338,7 +335,7 @@ void setup()
   // initialize display text to no value
   for (int n = 0; n < nMaxSensors; n++)
   {
-    textSensTemp[n] = "----------";
+    strcpy(textSensTemp[n], "----------");
   }
 
   // initialize display
@@ -462,18 +459,24 @@ void loop()
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 {
 
-  DATEN_STRUKTUR sESPReceive;
+  ESPNOW_DATA_STRUCTURE sESPReceive;
   int iChannelNr;
   int iLastSSinceLastRead;
   // copy received data to struct, to get access via variables
-   digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(LED_BUILTIN, LOW);
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   iChannelNr = sESPReceive.iSensorChannel;
   iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
   // depending on channel fill values. 0 is local sensor and not used here
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
-    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / 100;
+    
+    //recieve sensor TempA and instantly convert to int
+    debugln("received raw TempA: ");
+    
+    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
+    
+
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -517,9 +520,9 @@ void sendDataToMainStation()
 #ifdef DEBUG
   char output[256];
 #endif
-int iCheckSum = 0;
+  int iCheckSum = 0;
   StaticJsonDocument<capacity> jsonDocument;
-  // change to array
+  // change to array 
   for (int n = 0; n < nMaxSensors; n++)
   {
     if (sSensor[n].bSensorRec == true)
@@ -528,7 +531,15 @@ int iCheckSum = 0;
       // checksum is computed at reciever as well
       debug("Send Sensor Nr.: ");
       debugln(n);
-      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt+ sSensor[n].iLight + sSensor[n].fAtmo;
+      debugln("Serial print");
+      Serial.println(sSensor[n].fTempA, 10);
+      //  debugln("dtostrf print");
+      //  Serial.println(valueStr);
+      // Checksum with 100 times values
+      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt + sSensor[n].iLight + sSensor[n].fAtmo;
+      debugln("checksum: ");
+      debugln(iCheckSum);
+      // json with real values
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
@@ -540,14 +551,19 @@ int iCheckSum = 0;
       jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
-      serializeJson(jsonDocument, swSer);
+      serializeJson(jsonDocument, output);
+
+      // serializeJson(jsonDocument, swSer);
+      swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);
-#ifdef DEBUG
-      serializeJson(jsonDocument, output);
       Serial.println(output);
       memset(&output, 0, 256);
-#endif
+      /* #ifdef DEBUG
+            serializeJson(jsonDocument, output);
+            Serial.println(output);
+            memset(&output, 0, 256);
+      #endif */
     }
   }
 }
@@ -568,7 +584,7 @@ void readAtmosphere()
 {
   sSensor[0].fAtmo = bmp.readPressure();
   sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
-   sSensor[0].bSensorRec = true;
+  sSensor[0].bSensorRec = true;
 #if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
@@ -625,18 +641,19 @@ void formatTempExt()
   {
     if ((sSensor[n].iTimeSinceLastRead > iSensorTimeout) || (sSensor[n].bSensorRegistered == false))
     {
-      // kein Sensor gefunden
+      // no sensor found
       debug("Sensor Nr.: ");
       debugln(n);
       debug("channel: ");
       debugln(sSensor[n].iSensorChannel);
       debugln(" no sensor data received since ");
       debugln(sSensor[n].iTimeSinceLastRead);
-      textSensTemp[n] = "----------";
+      strcpy(textSensTemp[n], "----------");
     }
     else
     {
-      textSensTemp[n] = String(sSensor[n].fTempA) + " °C";
+      // sensor found write a formatted string into display array
+      sprintf(textSensTemp[n], "%i.%02i °C", sSensor[n].fTempA / 100, abs(sSensor[n].fTempA) % 100);
     }
   }
 }
@@ -754,3 +771,4 @@ void macAddrToString(byte *mac, char *str)
   // replace the final colon with a nul terminator
   str[-1] = '\0';
 }
+

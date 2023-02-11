@@ -307,7 +307,7 @@ void sendMQTTMessage()
     // Sensor 1
     if (sSensor[1].bSensorRec == true)
     {
-      dtostrf(sSensor[1].fTempA, 4, 2, valueStr);
+      dtostrf((sSensor[1].fTempA/100), 4, 2, valueStr);
       mqttClient.publish("Sensor1/fTempA", valueStr);
       dtostrf(sSensor[1].fVolt, 4, 2, valueStr);
       mqttClient.publish("Sensor1/fVolt", valueStr);
@@ -327,7 +327,7 @@ void sendMQTTMessage()
     // Sensor 2
     if (sSensor[2].bSensorRec == true)
     {
-      dtostrf(sSensor[2].fTempA, 4, 2, valueStr);
+      dtostrf((sSensor[2].fTempA)/100, 4, 2, valueStr);
       mqttClient.publish("Sensor2/fTempA", valueStr);
       dtostrf(sSensor[2].fVolt, 4, 2, valueStr);
       mqttClient.publish("Sensor2/fVolt", valueStr);
@@ -384,7 +384,7 @@ void sendMQTTMessage()
     } // Sensor 5
     if (sSensor[5].bSensorRec == true)
     {
-      dtostrf(sSensor[5].fTempA, 4, 2, valueStr);
+      dtostrf(float(sSensor[5].fTempA)/(float)100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempA", valueStr);
       dtostrf(sSensor[5].fTempB, 4, 2, valueStr);
       mqttClient.publish("Sensor5/fTempB", valueStr);
