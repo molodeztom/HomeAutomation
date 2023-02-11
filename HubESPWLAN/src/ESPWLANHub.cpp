@@ -16,6 +16,7 @@ History:
 20230311  V0.5: c receive values *100 as int to avoid float errors.
 20230311  V0.6: c rename float to int variables
 20230311  V0.7: c remove unneeded debug output
+20230311  V0.8: c all sensors float /100
 */
 
 #include <Arduino.h>
@@ -120,7 +121,7 @@ void setup()
 void loop()
 {
 
-    // Receive serial message from weather station
+  // Receive serial message from weather station
   recvSerialwStartEndMarkers();
   ArduinoOTA.handle();
 #if DEBUG == 1
@@ -269,12 +270,11 @@ void sendMQTTMessage()
     if (sSensor[0].bSensorRec == true)
     {
 
-      dtostrf(sSensor[0].iLight, 3, 0, valueStr);
+      dtostrf(float(sSensor[0].iLight) / 100, 4, 2, valueStr);
       // mqttClient.publish("SensorLoc/iLight", valueStr);
-      dtostrf(sSensor[0].iAtmo, 4, 2, valueStr);
+      dtostrf(float(sSensor[0].iAtmo / 100), 4, 2, valueStr);
       // mqttClient.publish("SensorLoc/iAtmo", valueStr);
       sSensor[0].bSensorRec = false;
-
       debugln("MQTT send SensorLoc");
     }
     else
@@ -287,11 +287,13 @@ void sendMQTTMessage()
     // Sensor 1
     if (sSensor[1].bSensorRec == true)
     {
-      dtostrf((sSensor[1].iTempA / 100), 4, 2, valueStr);
+      dtostrf(float((sSensor[1].iTempA) / 100), 4, 2, valueStr);
       mqttClient.publish("Sensor1/iTempA", valueStr);
-      dtostrf(sSensor[1].iVolt, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[1].iVolt / 100), 4, 2, valueStr);
       mqttClient.publish("Sensor1/iVolt", valueStr);
-      dtostrf(sSensor[1].iHumi, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[1].iHumi) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor1/iHumi", valueStr);
       sSensor[1].bSensorRec = false;
       debugln("MQTT send Sensor1");
@@ -307,12 +309,12 @@ void sendMQTTMessage()
     // Sensor 2
     if (sSensor[2].bSensorRec == true)
     {
-      dtostrf((sSensor[2].iTempA) / 100, 4, 2, valueStr);
+      dtostrf(float((sSensor[2].iTempA)) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor2/iTempA", valueStr);
-      dtostrf(sSensor[2].iVolt, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[2].iVolt) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor2/iVolt", valueStr);
       sSensor[2].bSensorRec = false;
-
       debugln("MQTT send Sensor2");
     }
     else
@@ -327,12 +329,12 @@ void sendMQTTMessage()
     // Sensor 3
     if (sSensor[3].bSensorRec == true)
     {
-      dtostrf(sSensor[3].iTempA, 4, 2, valueStr);
+      dtostrf(float(sSensor[3].iTempA) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor3/iTempA", valueStr);
-      dtostrf(sSensor[3].iVolt, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[3].iVolt) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor3/iVolt", valueStr);
       sSensor[3].bSensorRec = false;
-
       debugln("MQTT send Sensor3");
     }
     else
@@ -345,14 +347,15 @@ void sendMQTTMessage()
     // Sensor 4
     if (sSensor[4].bSensorRec == true)
     {
-      dtostrf(sSensor[4].iTempA, 4, 2, valueStr);
+      dtostrf(float(sSensor[4].iTempA) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor4/iTempA", valueStr);
-      dtostrf(sSensor[4].iTempB, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[4].iTempB) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor4/iTempB", valueStr);
-      dtostrf(sSensor[4].iVolt, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[4].iVolt) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor4/iVolt", valueStr);
       sSensor[4].bSensorRec = false;
-
       debugln("MQTT send Sensor4");
     }
     else
@@ -377,7 +380,6 @@ void sendMQTTMessage()
       mqttClient.publish("Sensor5/fHumi", valueStr);
 
       sSensor[5].bSensorRec = false;
-
       debugln("MQTT send Sensor5");
     }
     else
