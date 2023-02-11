@@ -8,6 +8,7 @@ Used in WeatherStation and HomeServer
 20200522  V1.0  Stable error handling and messaging
 20200627  V1.1  Sensor #5 added   
 20230115  V1.2  nMaxSensors   
+20230211  V1.3  rename float to int variable names
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
@@ -64,12 +65,12 @@ struct ESPNOW_DATA_STRUCTURE
 struct SENSOR_DATA
 {
     int iSensorChannel = nMaxSensors +1;
-    int fTempA = InvalidMeasurement;
-    float fTempB = InvalidMeasurement;
-    float fTempC = InvalidMeasurement;
-    float fHumi = InvalidMeasurement;
-    float fVolt = InvalidMeasurement;
-    float fAtmo = InvalidMeasurement;
+    int iTempA = InvalidMeasurement;
+    int iTempB = InvalidMeasurement;
+    int iTempC = InvalidMeasurement;
+    int iHumi = InvalidMeasurement;
+    int iVolt = InvalidMeasurement;
+    int iAtmo = InvalidMeasurement;
     String sMacAddress = "0000000000000000000";
     int iLight = 0;
     bool bSensorRec = false; //true when valid sensor data received in time frame

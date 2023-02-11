@@ -42,6 +42,7 @@ History:
 20230205  V0.27:  c send values with less resolution /Branch Float Tests
 20230209  V0.28:  c use int instead of float where possible to avoid loosing precision
 20230211  V0.29:  c remove unneeded debug functions, use char[] instead of string
+20230211  V0.30:  c rename float to int value names
 
 
  */
@@ -74,7 +75,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.29";
+const String sSoftware = "HubESPNow V0.30";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -474,9 +475,9 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     //recieve sensor TempA and instantly convert to int
     debugln("received raw TempA: ");
     
-    sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
-    sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100);
-    sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
+    sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
+    sSensor[iChannelNr].iHumi = roundf(sESPReceive.fESPNowHumi * 100);
+    sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
     sSensor[iChannelNr].bSensorRec = true;
@@ -498,11 +499,11 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debug("Channel nr.:");
     debugln(iChannelNr);
     debug("Temperature A: ");
-    debugln(sSensor[iChannelNr].fTempA);
+    debugln(sSensor[iChannelNr].iTempA);
     debug("Humidity: ");
-    debugln(sSensor[iChannelNr].fHumi);
+    debugln(sSensor[iChannelNr].iHumi);
     debug("Batt V: ");
-    debugln(sSensor[iChannelNr].fVolt);
+    debugln(sSensor[iChannelNr].iVolt);
     debug(iLastSSinceLastRead);
     debugln(" min since last read ");
     debugln();
@@ -530,22 +531,22 @@ void sendDataToMainStation()
       debug("Send Sensor Nr.: ");
       debugln(n);
       debugln("Serial print");
-      Serial.println(sSensor[n].fTempA, 10);
+      Serial.println(sSensor[n].iTempA, 10);
       //  debugln("dtostrf print");
       //  Serial.println(valueStr);
       // Checksum with 100 times values
-      iCheckSum = sSensor[n].fTempA + sSensor[n].fHumi + sSensor[n].fVolt + sSensor[n].iLight + sSensor[n].fAtmo;
+      iCheckSum = sSensor[n].iTempA + sSensor[n].iHumi + sSensor[n].iVolt + sSensor[n].iLight + sSensor[n].iAtmo;
       debugln("checksum: ");
       debugln(iCheckSum);
       // json with real values
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
-      jsonDocument["fTempA"] = sSensor[n].fTempA;
-      jsonDocument["fHumi"] = sSensor[n].fHumi;
-      jsonDocument["fVolt"] = sSensor[n].fVolt;
+      jsonDocument["iTempA"] = sSensor[n].iTempA;
+      jsonDocument["iHumi"] = sSensor[n].iHumi;
+      jsonDocument["iVolt"] = sSensor[n].iVolt;
       jsonDocument["iLight"] = sSensor[n].iLight;
-      jsonDocument["fAtmo"] = sSensor[n].fAtmo;
+      jsonDocument["iAtmo"] = sSensor[n].iAtmo;
       jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
@@ -555,6 +556,7 @@ void sendDataToMainStation()
       swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);
+      debugln("JSON: ");
       Serial.println(output);
       memset(&output, 0, 256);
       /* #ifdef DEBUG
@@ -580,15 +582,15 @@ void ledOff(uint8_t LedNr)
 
 void readAtmosphere()
 {
-  sSensor[0].fAtmo = bmp.readPressure();
-  sSensor[0].fAtmo = sSensor[0].fAtmo / 100;
+  sSensor[0].iAtmo = bmp.readPressure();
+  sSensor[0].iAtmo = sSensor[0].iAtmo / 100;
   sSensor[0].bSensorRec = true;
 #if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
 #endif
   debug("Pressure = ");
-  debug(sSensor[0].fAtmo);
+  debug(sSensor[0].iAtmo);
   debugln(" Pascal");
   debug("BMP Temp = ");
   debugln(bmpTemp);
@@ -651,7 +653,7 @@ void formatTempExt()
     else
     {
       // sensor found write a formatted string into display array
-      sprintf(textSensTemp[n], "%i.%02i °C", sSensor[n].fTempA / 100, abs(sSensor[n].fTempA) % 100);
+      sprintf(textSensTemp[n], "%i.%02i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
     }
   }
 }

@@ -13,7 +13,8 @@ History:
 20230131  V0.2: + OTA
 20230131  V0.3: + use DEBUG macro
 20230204  V0.4: c use arrays for sensor, LED Blink, use timers
-20230311  V0.5: c receive values *100 as int to avoid float errors. 
+20230311  V0.5: c receive values *100 as int to avoid float errors.
+20230311  V0.6: c rename float to int variables
 */
 
 #include <Arduino.h>
@@ -28,7 +29,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.3";
+const String sSoftware = "ESPWLANHub V0.6";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -215,6 +216,9 @@ void readJSONMessage()
   {
     // get single values from JSON to local values if not found set default value to recognize the problem
     // common values for all sensors even if a measurement is not supported
+    // TODO: remove
+    debugln("JSON: ");
+    Serial.println(cSerialRxIn);
     iSensor = jsonDocument["sensor"] | InvalidMeasurement;
     if (iSensor < 0 || iSensor > 5)
     {
@@ -232,14 +236,15 @@ void readJSONMessage()
     debugln(iSensor);
     debugln(serialCount);
 #endif
-    sSensor[iSensor].fTempA = jsonDocument["fTempA"] | InvalidMeasurement;
-    sSensor[iSensor].fHumi = jsonDocument["fHumi"] | InvalidMeasurement;
-    sSensor[iSensor].fVolt = jsonDocument["fVolt"] | InvalidMeasurement;
+    sSensor[iSensor].iTempA = jsonDocument["iTempA"] | InvalidMeasurement;
+    sSensor[iSensor].iHumi = jsonDocument["iHumi"] | InvalidMeasurement;
+    sSensor[iSensor].iVolt = jsonDocument["iVolt"] | InvalidMeasurement;
     sSensor[iSensor].iLight = jsonDocument["iLight"] | InvalidMeasurement;
-    sSensor[iSensor].fAtmo = jsonDocument["fAtmo"] | InvalidMeasurement;
-    sSensor[iSensor].fTempA = jsonDocument["fTempA"] | InvalidMeasurement;
+    sSensor[iSensor].iAtmo = jsonDocument["iAtmo"] | InvalidMeasurement;
+    sSensor[iSensor].iTempA = jsonDocument["iTempA"] | InvalidMeasurement;
     iCheckSumRec = jsonDocument["iCSum"] | InvalidMeasurement;
-    iCheckSumLocal = sSensor[iSensor].fTempA + sSensor[iSensor].fHumi + sSensor[iSensor].fVolt + sSensor[iSensor].iLight + sSensor[iSensor].fAtmo;
+    iCheckSumLocal = sSensor[iSensor].iTempA + sSensor[iSensor].iHumi + sSensor[iSensor].iVolt + sSensor[iSensor].iLight + sSensor[iSensor].iAtmo;
+
     if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
       debug("Checksum Error: ");
@@ -290,8 +295,8 @@ void sendMQTTMessage()
 
       dtostrf(sSensor[0].iLight, 3, 0, valueStr);
       // mqttClient.publish("SensorLoc/iLight", valueStr);
-      dtostrf(sSensor[0].fAtmo, 4, 2, valueStr);
-      // mqttClient.publish("SensorLoc/fAtmo", valueStr);
+      dtostrf(sSensor[0].iAtmo, 4, 2, valueStr);
+      // mqttClient.publish("SensorLoc/iAtmo", valueStr);
       sSensor[0].bSensorRec = false;
 
       debugln("MQTT send SensorLoc");
@@ -306,12 +311,12 @@ void sendMQTTMessage()
     // Sensor 1
     if (sSensor[1].bSensorRec == true)
     {
-      dtostrf((sSensor[1].fTempA / 100), 4, 2, valueStr);
-      mqttClient.publish("Sensor1/fTempA", valueStr);
-      dtostrf(sSensor[1].fVolt, 4, 2, valueStr);
-      mqttClient.publish("Sensor1/fVolt", valueStr);
-      dtostrf(sSensor[1].fHumi, 4, 2, valueStr);
-      mqttClient.publish("Sensor1/fHumi", valueStr);
+      dtostrf((sSensor[1].iTempA / 100), 4, 2, valueStr);
+      mqttClient.publish("Sensor1/iTempA", valueStr);
+      dtostrf(sSensor[1].iVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor1/iVolt", valueStr);
+      dtostrf(sSensor[1].iHumi, 4, 2, valueStr);
+      mqttClient.publish("Sensor1/iHumi", valueStr);
       sSensor[1].bSensorRec = false;
       debugln("MQTT send Sensor1");
     }
@@ -326,10 +331,10 @@ void sendMQTTMessage()
     // Sensor 2
     if (sSensor[2].bSensorRec == true)
     {
-      dtostrf((sSensor[2].fTempA) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor2/fTempA", valueStr);
-      dtostrf(sSensor[2].fVolt, 4, 2, valueStr);
-      mqttClient.publish("Sensor2/fVolt", valueStr);
+      dtostrf((sSensor[2].iTempA) / 100, 4, 2, valueStr);
+      mqttClient.publish("Sensor2/iTempA", valueStr);
+      dtostrf(sSensor[2].iVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor2/iVolt", valueStr);
       sSensor[2].bSensorRec = false;
 
       debugln("MQTT send Sensor2");
@@ -346,10 +351,10 @@ void sendMQTTMessage()
     // Sensor 3
     if (sSensor[3].bSensorRec == true)
     {
-      dtostrf(sSensor[3].fTempA, 4, 2, valueStr);
-      mqttClient.publish("Sensor3/fTempA", valueStr);
-      dtostrf(sSensor[3].fVolt, 4, 2, valueStr);
-      mqttClient.publish("Sensor3/fVolt", valueStr);
+      dtostrf(sSensor[3].iTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor3/iTempA", valueStr);
+      dtostrf(sSensor[3].iVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor3/iVolt", valueStr);
       sSensor[3].bSensorRec = false;
 
       debugln("MQTT send Sensor3");
@@ -364,12 +369,12 @@ void sendMQTTMessage()
     // Sensor 4
     if (sSensor[4].bSensorRec == true)
     {
-      dtostrf(sSensor[4].fTempA, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/fTempA", valueStr);
-      dtostrf(sSensor[4].fTempB, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/fTempB", valueStr);
-      dtostrf(sSensor[4].fVolt, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/fVolt", valueStr);
+      dtostrf(sSensor[4].iTempA, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/iTempA", valueStr);
+      dtostrf(sSensor[4].iTempB, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/iTempB", valueStr);
+      dtostrf(sSensor[4].iVolt, 4, 2, valueStr);
+      mqttClient.publish("Sensor4/iVolt", valueStr);
       sSensor[4].bSensorRec = false;
 
       debugln("MQTT send Sensor4");
@@ -383,17 +388,28 @@ void sendMQTTMessage()
     } // Sensor 5
     if (sSensor[5].bSensorRec == true)
     {
-      dtostrf(float(sSensor[5].fTempA) / 100, 4, 3, valueStr);
+      dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempA", valueStr);
-      dtostrf(float(sSensor[5].fTempB) / 100, 4, 3, valueStr);
+      Serial.printf("iTempA: ");
+      Serial.printf(valueStr);
+
+      dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempB", valueStr);
-      dtostrf(sSensor[5].fVolt / 100, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
+      Serial.printf("iVolt: ");
+      Serial.printf(valueStr);
       mqttClient.publish("Sensor5/fVolt", valueStr);
-      dtostrf(sSensor[5].fHumi / 100, 4, 2, valueStr);
+
+      dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fHumi", valueStr);
+
+      Serial.printf("iHumi: ");
+      Serial.printf(valueStr);
       sSensor[5].bSensorRec = false;
 
       debugln("MQTT send Sensor5");
+    
     }
     else
     {
