@@ -475,10 +475,8 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debugln("received raw TempA: ");
     
     sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
-    
-
-    sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
-    sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
+    sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100);
+    sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
     sSensor[iChannelNr].bSensorRec = true;

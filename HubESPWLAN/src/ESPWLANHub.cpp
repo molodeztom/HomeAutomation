@@ -13,6 +13,7 @@ History:
 20230131  V0.2: + OTA
 20230131  V0.3: + use DEBUG macro
 20230204  V0.4: c use arrays for sensor, LED Blink, use timers
+20230311  V0.5: c receive values *100 as int to avoid float errors. 
 */
 
 #include <Arduino.h>
@@ -73,7 +74,7 @@ long lMQTTLoop = 0;
 const unsigned long ulMQTTTimer = 5 * 1000UL; // time in sec
 long lOneMinuteTime = 0;
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec
-const int iSensorTimeout = 3; //minutes 
+const int iSensorTimeout = 3;                       // minutes
 long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 
@@ -135,14 +136,12 @@ void loop()
     readJSONMessage();
     sendMQTTMessage();
   }
- 
+
   // also used to send MQTT error every interval
- if ((millis() - lSecondsTime > ulSecondsInterval))
+  if ((millis() - lSecondsTime > ulSecondsInterval))
   {
-  
-   
-   
-     if (bLedState == LOW)
+
+    if (bLedState == LOW)
     {
       bLedState = HIGH;
     }
@@ -150,22 +149,22 @@ void loop()
     {
       bLedState = LOW;
     }
-  
-  digitalWrite(LED_BUILTIN, bLedState);
-    //debugln("1 Second");
-    // TODO Sensor 4 was not incremented in original code
-    //  will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
+
+    digitalWrite(LED_BUILTIN, bLedState);
+    // debugln("1 Second");
+    //  TODO Sensor 4 was not incremented in original code
+    //   will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
 
     lSecondsTime = millis();
   }
 
-   if ((millis() - lOneMinuteTime > ulOneMinuteTimer))
+  if ((millis() - lOneMinuteTime > ulOneMinuteTimer))
   {
 
     debugln("1 Minute");
-     // Every minute reading count up to detect timeout and then do not display
-  // counter goes up to iSensSerialTimeout if not reset during a sensor reading
-     for (int n = 0; n < nMaxSensors; n++)
+    // Every minute reading count up to detect timeout and then do not display
+    // counter goes up to iSensSerialTimeout if not reset during a sensor reading
+    for (int n = 0; n < nMaxSensors; n++)
     {
       sSensor[n].iTimeSinceLastRead++;
     }
@@ -182,21 +181,21 @@ void loop()
   //--------------------------blink part
 
   // unsigned long currentMillis = millis();
- /*
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
-    if (ledState == LOW)
-    {
-      ledState = HIGH;
-    }
-    else
-    {
-      ledState = LOW;
-    }
-  }
-  digitalWrite(LED_BUILTIN, ledState);
-  */
+  /*
+   if (currentMillis - previousMillis >= interval)
+   {
+     previousMillis = currentMillis;
+     if (ledState == LOW)
+     {
+       ledState = HIGH;
+     }
+     else
+     {
+       ledState = LOW;
+     }
+   }
+   digitalWrite(LED_BUILTIN, ledState);
+   */
 }
 // Read JSON values bz name from serial recieved message
 void readJSONMessage()
@@ -257,7 +256,7 @@ void readJSONMessage()
 }
 
 // Send all sensor values via MQTT to home server raspberry
-// send errors per sensor value in a separate channel
+// send errors per sensor value in a separate channel, sensor data is stored in an array with float values
 void sendMQTTMessage()
 {
   char valueStr[20]; // helper to convert string to MQTT char
@@ -290,9 +289,9 @@ void sendMQTTMessage()
     {
 
       dtostrf(sSensor[0].iLight, 3, 0, valueStr);
-      //mqttClient.publish("SensorLoc/iLight", valueStr);
+      // mqttClient.publish("SensorLoc/iLight", valueStr);
       dtostrf(sSensor[0].fAtmo, 4, 2, valueStr);
-      //mqttClient.publish("SensorLoc/fAtmo", valueStr);
+      // mqttClient.publish("SensorLoc/fAtmo", valueStr);
       sSensor[0].bSensorRec = false;
 
       debugln("MQTT send SensorLoc");
@@ -300,14 +299,14 @@ void sendMQTTMessage()
     else
     {
       if (sSensor[0].iTimeSinceLastRead > iSensorTimeout)
-      //  mqttClient.publish("SensorLoc/Err", "1");
-      debugln("Error Sens0");
+        //  mqttClient.publish("SensorLoc/Err", "1");
+        debugln("Error Sens0");
       debugln(sSensor[0].iTimeSinceLastRead);
     }
     // Sensor 1
     if (sSensor[1].bSensorRec == true)
     {
-      dtostrf((sSensor[1].fTempA/100), 4, 2, valueStr);
+      dtostrf((sSensor[1].fTempA / 100), 4, 2, valueStr);
       mqttClient.publish("Sensor1/fTempA", valueStr);
       dtostrf(sSensor[1].fVolt, 4, 2, valueStr);
       mqttClient.publish("Sensor1/fVolt", valueStr);
@@ -327,7 +326,7 @@ void sendMQTTMessage()
     // Sensor 2
     if (sSensor[2].bSensorRec == true)
     {
-      dtostrf((sSensor[2].fTempA)/100, 4, 2, valueStr);
+      dtostrf((sSensor[2].fTempA) / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor2/fTempA", valueStr);
       dtostrf(sSensor[2].fVolt, 4, 2, valueStr);
       mqttClient.publish("Sensor2/fVolt", valueStr);
@@ -384,13 +383,13 @@ void sendMQTTMessage()
     } // Sensor 5
     if (sSensor[5].bSensorRec == true)
     {
-      dtostrf(float(sSensor[5].fTempA)/(float)100, 4, 3, valueStr);
+      dtostrf(float(sSensor[5].fTempA) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempA", valueStr);
-      dtostrf(sSensor[5].fTempB, 4, 2, valueStr);
+      dtostrf(float(sSensor[5].fTempB) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempB", valueStr);
-      dtostrf(sSensor[5].fVolt, 4, 2, valueStr);
+      dtostrf(sSensor[5].fVolt / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor5/fVolt", valueStr);
-      dtostrf(sSensor[5].fHumi, 4, 2, valueStr);
+      dtostrf(sSensor[5].fHumi / 100, 4, 2, valueStr);
       mqttClient.publish("Sensor5/fHumi", valueStr);
       sSensor[5].bSensorRec = false;
 
@@ -399,7 +398,7 @@ void sendMQTTMessage()
     else
     {
       if (sSensor[5].iTimeSinceLastRead > iSensorTimeout)
-      mqttClient.publish("Sensor5/Err", "1");
+        mqttClient.publish("Sensor5/Err", "1");
       debugln("Error Sens5");
       debugln(sSensor[5].iTimeSinceLastRead);
     }
