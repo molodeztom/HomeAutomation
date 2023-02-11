@@ -41,6 +41,7 @@ History:
 20230204  V0.26:  c timing, HW Led blink
 20230205  V0.27:  c send values with less resolution /Branch Float Tests
 20230209  V0.28:  c use int instead of float where possible to avoid loosing precision
+20230211  V0.29:  c remove unneeded debug functions, use char[] instead of string
 
 
  */
@@ -73,7 +74,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.27";
+const String sSoftware = "HubESPNow V0.29";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -114,7 +115,8 @@ const unsigned long ulSendIntervall = 15 * 1000UL; // Upload to home server ever
 SoftwareSerial swSer(D9, D7, false);
 
 // Default display if any value becomes invalid. Invalid when for some time no value received
-String textSensTemp[nMaxSensors];
+
+char textSensTemp[nMaxSensors][22];
 String sNewSensorChannel;
 String sNewSensorMAC;
 bool bNewSensorFound = false;
@@ -144,8 +146,7 @@ bool bOTARunning = false; // true if OTA already running to prevent stop
 // SSID Open for some time. Sensors can contact AP to connect. After that time sensor use stored MAC adress
 long lAPOpenTime = 0;       // Timing
 int sSecondsUntilClose = 0; // counter to display how long still open
-// TODO: set back to 240 sec
-const unsigned long ulAPOpenInterval = 90 * 1000UL; // time in sec TIMER
+const unsigned long ulAPOpenInterval = 120 * 1000UL; // time in sec TIMER
 
 // ESP Now
 void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
@@ -211,7 +212,7 @@ void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
 void sendDataToMainStation();
-float round_to_2_decimal_places(float num);
+
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -334,7 +335,7 @@ void setup()
   // initialize display text to no value
   for (int n = 0; n < nMaxSensors; n++)
   {
-    textSensTemp[n] = "----------";
+    strcpy(textSensTemp[n], "----------");
   }
 
   // initialize display
@@ -469,18 +470,12 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   // depending on channel fill values. 0 is local sensor and not used here
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
-    // TODO remove test
-    // Test ohne Rundung
-    //   dtostrf(sSensor[n].fTempA, 4, 2, valueStr);
-    // sSensor[iChannelNr].fTempA = sESPReceive.fESPNowTempA + fTempCorr[iChannelNr];
-    //  sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100) / (float)100;
-
-    // TODO now recieve sensor TempA and instantly convert to int
+    
+    //recieve sensor TempA and instantly convert to int
     debugln("received raw TempA: ");
-    Serial.println(sESPReceive.fESPNowTempA, 7);
-    int iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
+    
     sSensor[iChannelNr].fTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
-    ;
+    
 
     sSensor[iChannelNr].fHumi = roundf(sESPReceive.fESPNowHumi * 100) / 100;
     sSensor[iChannelNr].fVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100) / 100;
@@ -526,9 +521,8 @@ void sendDataToMainStation()
   char output[256];
 #endif
   int iCheckSum = 0;
-  char valueStr[20];
   StaticJsonDocument<capacity> jsonDocument;
-  // change to array
+  // change to array 
   for (int n = 0; n < nMaxSensors; n++)
   {
     if (sSensor[n].bSensorRec == true)
@@ -537,8 +531,6 @@ void sendDataToMainStation()
       // checksum is computed at reciever as well
       debug("Send Sensor Nr.: ");
       debugln(n);
-      // TODO test remove
-      // dtostrf((sSensor[n].fTempA)/10, 4, 5, valueStr);
       debugln("Serial print");
       Serial.println(sSensor[n].fTempA, 10);
       //  debugln("dtostrf print");
@@ -649,35 +641,19 @@ void formatTempExt()
   {
     if ((sSensor[n].iTimeSinceLastRead > iSensorTimeout) || (sSensor[n].bSensorRegistered == false))
     {
-      // kein Sensor gefunden
+      // no sensor found
       debug("Sensor Nr.: ");
       debugln(n);
       debug("channel: ");
       debugln(sSensor[n].iSensorChannel);
       debugln(" no sensor data received since ");
       debugln(sSensor[n].iTimeSinceLastRead);
-      textSensTemp[n] = "----------";
+      strcpy(textSensTemp[n], "----------");
     }
     else
     {
-      // by default to
-      char strTest[22];
-      debugln("sSensor.fTempA: ");
-      Serial.println(sSensor[n].fTempA, 10);
-       int iTest = sSensor[n].fTempA;
-   /*   float fTest = ((sSensor[n].fTempA) / 100);
-      debugln("float: ");
-      Serial.println(fTest, 3);
-      sprintf(strTest, "%.2f", fTest);
-      debugln("sprintf: ");
-      sprintf(strTest, "Value = %.3f °C", fTest);
-      debugln("sprintf:%i.. "); */
-      sprintf(strTest, "%i.%02i", iTest / 100, abs(iTest) % 100);
-/*       debugln(strTest);
-             dtostrf(fTest,2,1,&strTest[strlen(strTest)]);
-         debugln("dtostrf"); */
-      Serial.println(strTest);
-      textSensTemp[n] = strTest;
+      // sensor found write a formatted string into display array
+      sprintf(textSensTemp[n], "%i.%02i °C", sSensor[n].fTempA / 100, abs(sSensor[n].fTempA) % 100);
     }
   }
 }
@@ -796,34 +772,3 @@ void macAddrToString(byte *mac, char *str)
   str[-1] = '\0';
 }
 
-float round_to_2_decimal_places(float num)
-{
-  debugln("new in round to :");
-  Serial.println(num, 7);
-  int dp = 3;
-  int charsNeeded = 1 + snprintf(NULL, 0, "%.*f", dp, num);
-  char *buffer = (char *)malloc(charsNeeded);
-  snprintf(buffer, charsNeeded, "%.*f", dp, num);
-  Serial.println(charsNeeded);
-  Serial.println(buffer);
-  double result = atof(buffer);
-  Serial.println(result, charsNeeded);
-
-  free(buffer);
-  debugln("Test mit +0.5 ");
-  float rounded = ((int)(num * 100 + .5) / 100.0);
-  Serial.println(rounded, 7);
-
-  Serial.println("Test mit Zahl 12.4567");
-  float test = 12.12345645678901234567890123456789012343;
-  Serial.println(test, 35);
-  Serial.println(test);
-  test = 12.456;
-  Serial.println(test, 20);
-  Serial.println(test);
-  test = 12.12345678901239901234567890123456789012343;
-  Serial.println(test, 20);
-  Serial.println(test);
-
-  return result;
-}
