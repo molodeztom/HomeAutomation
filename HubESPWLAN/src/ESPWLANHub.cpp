@@ -15,6 +15,7 @@ History:
 20230204  V0.4: c use arrays for sensor, LED Blink, use timers
 20230311  V0.5: c receive values *100 as int to avoid float errors.
 20230311  V0.6: c rename float to int variables
+20230311  V0.7: c remove unneeded debug output
 */
 
 #include <Arduino.h>
@@ -29,7 +30,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.6";
+const String sSoftware = "ESPWLANHub V0.7";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -119,10 +120,7 @@ void setup()
 void loop()
 {
 
-  // LED Blink TODO remove
-  // static unsigned long previousMillis = 0; //for blink
-  // const long interval = 500;
-  // Receive serial message from weather station
+    // Receive serial message from weather station
   recvSerialwStartEndMarkers();
   ArduinoOTA.handle();
 #if DEBUG == 1
@@ -178,25 +176,6 @@ void loop()
     debugln("MQTT Client loop");
     lMQTTLoop = millis();
   }
-
-  //--------------------------blink part
-
-  // unsigned long currentMillis = millis();
-  /*
-   if (currentMillis - previousMillis >= interval)
-   {
-     previousMillis = currentMillis;
-     if (ledState == LOW)
-     {
-       ledState = HIGH;
-     }
-     else
-     {
-       ledState = LOW;
-     }
-   }
-   digitalWrite(LED_BUILTIN, ledState);
-   */
 }
 // Read JSON values bz name from serial recieved message
 void readJSONMessage()
@@ -216,9 +195,6 @@ void readJSONMessage()
   {
     // get single values from JSON to local values if not found set default value to recognize the problem
     // common values for all sensors even if a measurement is not supported
-    // TODO: remove
-    debugln("JSON: ");
-    Serial.println(cSerialRxIn);
     iSensor = jsonDocument["sensor"] | InvalidMeasurement;
     if (iSensor < 0 || iSensor > 5)
     {
@@ -390,26 +366,19 @@ void sendMQTTMessage()
     {
       dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempA", valueStr);
-      Serial.printf("iTempA: ");
-      Serial.printf(valueStr);
 
       dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fTempB", valueStr);
 
       dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
-      Serial.printf("iVolt: ");
-      Serial.printf(valueStr);
       mqttClient.publish("Sensor5/fVolt", valueStr);
 
       dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
       mqttClient.publish("Sensor5/fHumi", valueStr);
 
-      Serial.printf("iHumi: ");
-      Serial.printf(valueStr);
       sSensor[5].bSensorRec = false;
 
       debugln("MQTT send Sensor5");
-    
     }
     else
     {
