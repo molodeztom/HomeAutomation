@@ -372,21 +372,100 @@ void sendMQTTMessage()
       // cChannelName
       // TODO: i in a for next loop
       int i = 5;
-      sprintf(cChannelName, "Sensor%i/fTempA", i);
-      dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
-      mqttClient.publish(cChannelName, valueStr);
+      // TODO test
+      int sSensorCapabilities = 0;
+      int sTest = 0;
+      char sTestCap[20];
 
-      sprintf(cChannelName, "Sensor%i/fTempB", i);
-      dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
-      mqttClient.publish(cChannelName, valueStr);
+      const uint16_t TEMPA_ON = 1 << 0; // 1 (0x1)
+      const uint16_t TEMPB_ON = 1 << 1; // 2 (0x2)
+      const uint16_t VOLT_ON = 1 << 2;  // 4 (0x4);
+      const uint16_t HUMI_ON = 1 << 3;  // 8 (0x8)
+      const uint16_t LIGHT_ON = 1 << 4; // 16 (0x10)
+      const uint16_t ATMO_ON = 1 << 5;  // 32 (0x20)
+      const uint16_t OPT1_ON = 1 << 6;  // 64 (0x40)
+      const uint16_t OPT2_ON = 1 << 7;  // 128 (0x80)
+      const uint16_t OPT3_ON = 1 << 8;  // 256 (0x100)
 
-      sprintf(cChannelName, "Sensor%i/fVolt", i);
-      dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
-      mqttClient.publish(cChannelName, valueStr);
+      sSensorCapabilities = TEMPA_ON;
+      debug("Sensor Capabilities");
+      debugln(sSensorCapabilities);
+      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
+      debugln(sTestCap);
 
-      sprintf(cChannelName, "Sensor%i/fHumi", i);
-      dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
-      mqttClient.publish(cChannelName, valueStr);
+      sSensorCapabilities = VOLT_ON;
+      debug("Sensor Capabilities");
+      debugln(sSensorCapabilities);
+      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
+      debugln(sTestCap);
+
+      sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
+      debug("Sensor Capabilities");
+      debugln(sSensorCapabilities);
+      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
+      debugln(sTestCap);
+
+      if (sSensorCapabilities & TEMPA_ON)
+      {
+        sprintf(cChannelName, "Sensor%i/fTempA", i);
+        dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+      }
+      if (sSensorCapabilities & TEMPB_ON)
+      {
+        sprintf(cChannelName, "Sensor%i/fTempB", i);
+        dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+      }
+
+      if (sSensorCapabilities & VOLT_ON)
+      {
+        sprintf(cChannelName, "Sensor%i/fVolt", i);
+        dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+      }
+
+      if (sSensorCapabilities & HUMI_ON)
+      {
+        sprintf(cChannelName, "Sensor%i/fHumi", i);
+        dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+      }
+
+      if (sSensorCapabilities & LIGHT_ON)
+      {
+                sprintf(cChannelName, "Sensor%i/iLight", i);
+        dtostrf(float(sSensor[5].iLight) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+
+      }
+      if (sSensorCapabilities & ATMO_ON)
+      {
+                        sprintf(cChannelName, "Sensor%i/iAtmo", i);
+        dtostrf(float(sSensor[5].iAtmo) / 100, 4, 3, valueStr);
+        mqttClient.publish(cChannelName, valueStr);
+        debugln(cChannelName);
+       
+      }
+      if (sSensorCapabilities & OPT1_ON)
+      {
+        debugln("OPT1_ON");
+      }
+
+      if (sSensorCapabilities & OPT2_ON)
+      {
+        debugln("OPT2_ON");
+      }
+
+      if (sSensorCapabilities & OPT3_ON)
+      {
+        debugln("OPT3_ON");
+      }
 
       sSensor[5].bSensorRec = false;
       debugln("MQTT send Sensor5");
