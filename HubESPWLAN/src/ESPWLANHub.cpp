@@ -214,14 +214,16 @@ void readJSONMessage()
     debugln(iSensor);
     debugln(serialCount);
 #endif
+    sSensor[iSensor].sSensorCapabilities = jsonDocument["SensCap"];
     sSensor[iSensor].iTempA = jsonDocument["iTempA"] | InvalidMeasurement;
+    sSensor[iSensor].iTempB = jsonDocument["iTempB"] | InvalidMeasurement;
     sSensor[iSensor].iHumi = jsonDocument["iHumi"] | InvalidMeasurement;
     sSensor[iSensor].iVolt = jsonDocument["iVolt"] | InvalidMeasurement;
     sSensor[iSensor].iLight = jsonDocument["iLight"] | InvalidMeasurement;
     sSensor[iSensor].iAtmo = jsonDocument["iAtmo"] | InvalidMeasurement;
-    sSensor[iSensor].iTempA = jsonDocument["iTempA"] | InvalidMeasurement;
+
     iCheckSumRec = jsonDocument["iCSum"] | InvalidMeasurement;
-    iCheckSumLocal = sSensor[iSensor].iTempA + sSensor[iSensor].iHumi + sSensor[iSensor].iVolt + sSensor[iSensor].iLight + sSensor[iSensor].iAtmo;
+    iCheckSumLocal = sSensor[iSensor].sSensorCapabilities + sSensor[iSensor].iTempA + sSensor[iSensor].iHumi + sSensor[iSensor].iVolt + sSensor[iSensor].iLight + sSensor[iSensor].iAtmo;
 
     if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
@@ -373,37 +375,10 @@ void sendMQTTMessage()
       // TODO: i in a for next loop
       int i = 5;
       // TODO test
-      int sSensorCapabilities = 0;
-      int sTest = 0;
-      char sTestCap[20];
+      uint16_t sSensorCapabilities = sSensor[5].sSensorCapabilities;
 
-      const uint16_t TEMPA_ON = 1 << 0; // 1 (0x1)
-      const uint16_t TEMPB_ON = 1 << 1; // 2 (0x2)
-      const uint16_t VOLT_ON = 1 << 2;  // 4 (0x4);
-      const uint16_t HUMI_ON = 1 << 3;  // 8 (0x8)
-      const uint16_t LIGHT_ON = 1 << 4; // 16 (0x10)
-      const uint16_t ATMO_ON = 1 << 5;  // 32 (0x20)
-      const uint16_t OPT1_ON = 1 << 6;  // 64 (0x40)
-      const uint16_t OPT2_ON = 1 << 7;  // 128 (0x80)
-      const uint16_t OPT3_ON = 1 << 8;  // 256 (0x100)
-
-      sSensorCapabilities = TEMPA_ON;
       debug("Sensor Capabilities");
       debugln(sSensorCapabilities);
-      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
-      debugln(sTestCap);
-
-      sSensorCapabilities = VOLT_ON;
-      debug("Sensor Capabilities");
-      debugln(sSensorCapabilities);
-      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
-      debugln(sTestCap);
-
-      sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-      debug("Sensor Capabilities");
-      debugln(sSensorCapabilities);
-      sprintf(sTestCap, "SensCap: %x", sSensorCapabilities);
-      debugln(sTestCap);
 
       if (sSensorCapabilities & TEMPA_ON)
       {
@@ -438,19 +413,17 @@ void sendMQTTMessage()
 
       if (sSensorCapabilities & LIGHT_ON)
       {
-                sprintf(cChannelName, "Sensor%i/iLight", i);
+        sprintf(cChannelName, "Sensor%i/iLight", i);
         dtostrf(float(sSensor[5].iLight) / 100, 4, 3, valueStr);
         mqttClient.publish(cChannelName, valueStr);
         debugln(cChannelName);
-
       }
       if (sSensorCapabilities & ATMO_ON)
       {
-                        sprintf(cChannelName, "Sensor%i/iAtmo", i);
+        sprintf(cChannelName, "Sensor%i/iAtmo", i);
         dtostrf(float(sSensor[5].iAtmo) / 100, 4, 3, valueStr);
         mqttClient.publish(cChannelName, valueStr);
         debugln(cChannelName);
-       
       }
       if (sSensorCapabilities & OPT1_ON)
       {

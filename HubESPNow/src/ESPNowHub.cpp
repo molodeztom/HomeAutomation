@@ -97,8 +97,10 @@ const String sSoftware = "HubESPNow V0.30";
 #endif
 
 // used to correct small deviances in sensor reading sensor 0 is local sensor  0.xyz  x=Volt y=0.1Volt z=0.01V3,
+// TODO move this into sensor code to add new sensors with more flexibilitie
 const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
-const float fTempCorr[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
+const float fTempCorrA[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
+const float fTempCorrB[nMaxSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // struct for exchanging data over ESP NOW
 
@@ -309,6 +311,19 @@ void setup()
   }
   // local sensor always read used for registration of new sensor
   sSensor[0].bSensorRegistered = true;
+  // initialize sensor capabilities TODO implement in in sensor to send its capabilities
+  sSensor[0].sSensorCapabilities = 0;
+  sSensor[0].sSensorCapabilities = LIGHT_ON | ATMO_ON;
+  sSensor[1].sSensorCapabilities = 0;
+  sSensor[1].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
+  sSensor[2].sSensorCapabilities = 0;
+  sSensor[2].sSensorCapabilities = TEMPA_ON | VOLT_ON;
+  sSensor[3].sSensorCapabilities = 0;
+  sSensor[3].sSensorCapabilities = TEMPA_ON | VOLT_ON;
+  sSensor[4].sSensorCapabilities = 0;
+  sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
+  sSensor[5].sSensorCapabilities = 0;
+  sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -471,12 +486,29 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
 
-    // recieve sensor TempA and instantly convert to int
-    debugln("received raw TempA: ");
+    // recieve sensor values instantly convert to int
 
-    sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
-    sSensor[iChannelNr].iHumi = roundf(sESPReceive.fESPNowHumi * 100);
-    sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
+    if (sSensor[iChannelNr].sSensorCapabilities & TEMPA_ON)
+    {
+      sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorrA[iChannelNr]) * 100);
+      debugln("capabilities TempAOn");
+    }
+        if (sSensor[iChannelNr].sSensorCapabilities & TEMPB_ON)
+    {
+      sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempB + fTempCorrB[iChannelNr]) * 100);
+      debugln("capabilities TempBOn");
+    }
+    if (sSensor[iChannelNr].sSensorCapabilities & HUMI_ON)
+    {
+      sSensor[iChannelNr].iHumi = roundf(sESPReceive.fESPNowHumi * 100);
+      debugln("capabilities HumiOn");
+    }
+    if (sSensor[iChannelNr].sSensorCapabilities & VOLT_ON)
+    {
+      sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
+      debugln("capabilities VoltOn");
+    }
+
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
     sSensor[iChannelNr].bSensorRec = true;
@@ -505,7 +537,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     debugln(sSensor[iChannelNr].iVolt);
     debug(iLastSSinceLastRead);
     debugln(" min since last read ");
-    debugln();
+    debugln(iLastSSinceLastRead);
   }
 };
 
@@ -530,10 +562,11 @@ void sendDataToMainStation()
       debug("Send Sensor Nr.: ");
       debugln(n);
       // Checksum with 100 times values
-      iCheckSum = sSensor[n].iTempA + sSensor[n].iHumi + sSensor[n].iVolt + sSensor[n].iLight + sSensor[n].iAtmo;
+      iCheckSum = sSensor[n].iTempA + sSensor[n].iHumi + sSensor[n].iVolt + sSensor[n].iLight + sSensor[n].iAtmo + sSensor[n].sSensorCapabilities;
       debugln("checksum: ");
       debugln(iCheckSum);
-      // json with real values
+     //JSON with values * 100 in int format
+      //TODO send onlz values the sensor supports
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
@@ -542,6 +575,7 @@ void sendDataToMainStation()
       jsonDocument["iVolt"] = sSensor[n].iVolt;
       jsonDocument["iLight"] = sSensor[n].iLight;
       jsonDocument["iAtmo"] = sSensor[n].iAtmo;
+      jsonDocument["SensCap"] = sSensor[n].sSensorCapabilities;
       jsonDocument["iCSum"] = iCheckSum;
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
@@ -554,7 +588,6 @@ void sendDataToMainStation()
       debugln("JSON: ");
       debugln(output);
       memset(&output, 0, 256);
-      
     }
   }
 }
