@@ -9,15 +9,17 @@ receive sensor values over serial interface in JSON format
 send sensor values over WLAN in MQTT format
 receieve local sensor value from DS18B20
 History:
-20230130  V0.1: Initial version compiles not tested for function
-20230131  V0.2: + OTA
-20230131  V0.3: + use DEBUG macro
-20230204  V0.4: c use arrays for sensor, LED Blink, use timers
-20230211  V0.5: c receive values *100 as int to avoid float errors.
-20230211  V0.6: c rename float to int variables
-20230211  V0.7: c remove unneeded debug output
-20230211  V0.8: c all sensors float /100
-20230212  V0.9: c MQTT send using array
+20230130  V0.1:   Initial version compiles not tested for function
+20230131  V0.2:   + OTA
+20230131  V0.3:   + use DEBUG macro
+20230204  V0.4:   c use arrays for sensor, LED Blink, use timers
+20230211  V0.5:   c receive values *100 as int to avoid float errors.
+20230211  V0.6:   c rename float to int variables
+20230211  V0.7:   c remove unneeded debug output
+20230211  V0.8:   c all sensors float /100
+20230212  V0.9:   c MQTT send using array
+20230212  V0.10:  c recieve sensor capabilities over serial use loop for mqtt send
+20230212  V0.11:  d calculate correct checksum only used values
 */
 
 #include <Arduino.h>
@@ -32,7 +34,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.7";
+const String sSoftware = "ESPWLANHub V0.11";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -186,6 +188,7 @@ void readJSONMessage()
   int iCheckSumLocal;  // Checksum computed local
   int iCheckSumRec;    // Checksum received serial
   bool bError = false; // error handling
+
   DeserializationError err = deserializeJson(jsonDocument, cSerialRxIn);
   if (err)
   {
@@ -214,6 +217,7 @@ void readJSONMessage()
     debugln(iSensor);
     debugln(serialCount);
 #endif
+
     sSensor[iSensor].sSensorCapabilities = jsonDocument["SensCap"];
     sSensor[iSensor].iTempA = jsonDocument["iTempA"] | InvalidMeasurement;
     sSensor[iSensor].iTempB = jsonDocument["iTempB"] | InvalidMeasurement;
@@ -221,14 +225,30 @@ void readJSONMessage()
     sSensor[iSensor].iVolt = jsonDocument["iVolt"] | InvalidMeasurement;
     sSensor[iSensor].iLight = jsonDocument["iLight"] | InvalidMeasurement;
     sSensor[iSensor].iAtmo = jsonDocument["iAtmo"] | InvalidMeasurement;
-
     iCheckSumRec = jsonDocument["iCSum"] | InvalidMeasurement;
-    iCheckSumLocal = sSensor[iSensor].sSensorCapabilities + sSensor[iSensor].iTempA + sSensor[iSensor].iHumi + sSensor[iSensor].iVolt + sSensor[iSensor].iLight + sSensor[iSensor].iAtmo;
+    iCheckSumLocal = sSensor[iSensor].sSensorCapabilities;
+    // use only values we really received for checksum calculation
+    if (sSensor[iSensor].iTempA != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iTempA;
+    if (sSensor[iSensor].iTempB != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iTempB;
+    if (sSensor[iSensor].iHumi != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iHumi;
+    if (sSensor[iSensor].iVolt != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iVolt;
+    if (sSensor[iSensor].iLight != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iLight;
+    if (sSensor[iSensor].iAtmo != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iAtmo;
+    if (sSensor[iSensor].iAtmo != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].iAtmo;
 
     if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
-      debug("Checksum Error: ");
-      debug(iCheckSumRec);
+      debug("Checksum Error recieved / calculated: ");
+      debugln(iCheckSumRec);
+      debugln(iCheckSumLocal);
+
       bError = true;
     }
     else
@@ -267,192 +287,90 @@ void sendMQTTMessage()
   }
   if (bError == false)
   {
-    // TODO replace this by using an array and creating the MQTT channel names with a string operation
-    // TODO uncomment mqtt send
-    //  Sensor Loc
-    debugln("check for valid sensor readings");
-    if (sSensor[0].bSensorRec == true)
+    // check all sensors if valid data available, send MQTT message according to sensor capabilities, sensor 0 = sensor loc
+    for (int i = 0; i < nMaxSensors; i++)
     {
-
-      dtostrf(float(sSensor[0].iLight) / 100, 4, 2, valueStr);
-      // mqttClient.publish("SensorLoc/iLight", valueStr);
-      dtostrf(float(sSensor[0].iAtmo / 100), 4, 2, valueStr);
-      // mqttClient.publish("SensorLoc/iAtmo", valueStr);
-      sSensor[0].bSensorRec = false;
-      debugln("MQTT send SensorLoc");
-    }
-    else
-    {
-      if (sSensor[0].iTimeSinceLastRead > iSensorTimeout)
-        //  mqttClient.publish("SensorLoc/Err", "1");
-        debugln("Error Sens0");
-      debugln(sSensor[0].iTimeSinceLastRead);
-    }
-    // Sensor 1
-    if (sSensor[1].bSensorRec == true)
-    {
-      dtostrf(float((sSensor[1].iTempA) / 100), 4, 2, valueStr);
-      mqttClient.publish("Sensor1/iTempA", valueStr);
-
-      dtostrf(float(sSensor[1].iVolt / 100), 4, 2, valueStr);
-      mqttClient.publish("Sensor1/iVolt", valueStr);
-
-      dtostrf(float(sSensor[1].iHumi) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor1/iHumi", valueStr);
-      sSensor[1].bSensorRec = false;
-      debugln("MQTT send Sensor1");
-    }
-    else
-    {
-      if (sSensor[1].iTimeSinceLastRead > iSensorTimeout)
-
-        // mqttClient.publish("Sensor1/Err", "1");
-        debugln("Error Sens1");
-      debugln(sSensor[1].iTimeSinceLastRead);
-    }
-    // Sensor 2
-    if (sSensor[2].bSensorRec == true)
-    {
-      dtostrf(float((sSensor[2].iTempA)) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor2/iTempA", valueStr);
-
-      dtostrf(float(sSensor[2].iVolt) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor2/iVolt", valueStr);
-      sSensor[2].bSensorRec = false;
-      debugln("MQTT send Sensor2");
-    }
-    else
-    {
-      if (sSensor[2].iTimeSinceLastRead > iSensorTimeout)
+      if (sSensor[i].bSensorRec == true)
       {
-        //  mqttClient.publish("Sensor2/Err", "1");
-        debugln("Error Sens2");
-        debugln(sSensor[2].iTimeSinceLastRead);
-      }
-    }
-    // Sensor 3
-    if (sSensor[3].bSensorRec == true)
-    {
-      dtostrf(float(sSensor[3].iTempA) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor3/iTempA", valueStr);
+        uint16_t sSensorCapabilities = sSensor[i].sSensorCapabilities;
 
-      dtostrf(float(sSensor[3].iVolt) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor3/iVolt", valueStr);
-      sSensor[3].bSensorRec = false;
-      debugln("MQTT send Sensor3");
-    }
-    else
-    {
-      if (sSensor[3].iTimeSinceLastRead > iSensorTimeout)
-        // mqttClient.publish("Sensor3/Err", "1");
-        debugln("Error Sens3");
-      debugln(sSensor[3].iTimeSinceLastRead);
-    }
-    // Sensor 4
-    if (sSensor[4].bSensorRec == true)
-    {
-      dtostrf(float(sSensor[4].iTempA) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/iTempA", valueStr);
+        debug("Sensor Capabilities");
+        debugln(sSensorCapabilities);
 
-      dtostrf(float(sSensor[4].iTempB) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/iTempB", valueStr);
+        if (sSensorCapabilities & TEMPA_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/fTempA", i);
+          dtostrf(float(sSensor[i].iTempA) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
+        if (sSensorCapabilities & TEMPB_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/fTempB", i);
+          dtostrf(float(sSensor[i].iTempB) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
 
-      dtostrf(float(sSensor[4].iVolt) / 100, 4, 2, valueStr);
-      mqttClient.publish("Sensor4/iVolt", valueStr);
-      sSensor[4].bSensorRec = false;
-      debugln("MQTT send Sensor4");
-    }
-    else
-    {
-      if (sSensor[4].iTimeSinceLastRead > iSensorTimeout)
-        //  mqttClient.publish("Sensor4/Err", "1");
-        debugln("Error Sens4");
-      debugln(sSensor[4].iTimeSinceLastRead);
-    } // Sensor 5
-    if (sSensor[5].bSensorRec == true)
-    {
-      // cChannelName
-      // TODO: i in a for next loop
-      int i = 5;
-      // TODO test
-      uint16_t sSensorCapabilities = sSensor[5].sSensorCapabilities;
+        if (sSensorCapabilities & VOLT_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/fVolt", i);
+          dtostrf(float(sSensor[i].iVolt) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
 
-      debug("Sensor Capabilities");
-      debugln(sSensorCapabilities);
+        if (sSensorCapabilities & HUMI_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/fHumi", i);
+          dtostrf(float(sSensor[i].iHumi) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
 
-      if (sSensorCapabilities & TEMPA_ON)
-      {
-        sprintf(cChannelName, "Sensor%i/fTempA", i);
-        dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
-      }
-      if (sSensorCapabilities & TEMPB_ON)
-      {
-        sprintf(cChannelName, "Sensor%i/fTempB", i);
-        dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
+        if (sSensorCapabilities & LIGHT_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/iLight", i);
+          dtostrf(float(sSensor[i].iLight) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
+        if (sSensorCapabilities & ATMO_ON)
+        {
+          sprintf(cChannelName, "Sensor%i/iAtmo", i);
+          dtostrf(float(sSensor[i].iAtmo) / 100, 4, 3, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debugln(cChannelName);
+        }
+        if (sSensorCapabilities & OPT1_ON)
+        {
+          debugln("OPT1_ON");
+        }
+
+        if (sSensorCapabilities & OPT2_ON)
+        {
+          debugln("OPT2_ON");
+        }
+
+        if (sSensorCapabilities & OPT3_ON)
+        {
+          debugln("OPT3_ON");
+        }
+
+        sSensor[i].bSensorRec = false;
       }
 
-      if (sSensorCapabilities & VOLT_ON)
+      else
       {
-        sprintf(cChannelName, "Sensor%i/fVolt", i);
-        dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
-      }
 
-      if (sSensorCapabilities & HUMI_ON)
-      {
-        sprintf(cChannelName, "Sensor%i/fHumi", i);
-        dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
-      }
-
-      if (sSensorCapabilities & LIGHT_ON)
-      {
-        sprintf(cChannelName, "Sensor%i/iLight", i);
-        dtostrf(float(sSensor[5].iLight) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
-      }
-      if (sSensorCapabilities & ATMO_ON)
-      {
-        sprintf(cChannelName, "Sensor%i/iAtmo", i);
-        dtostrf(float(sSensor[5].iAtmo) / 100, 4, 3, valueStr);
-        mqttClient.publish(cChannelName, valueStr);
-        debugln(cChannelName);
-      }
-      if (sSensorCapabilities & OPT1_ON)
-      {
-        debugln("OPT1_ON");
-      }
-
-      if (sSensorCapabilities & OPT2_ON)
-      {
-        debugln("OPT2_ON");
-      }
-
-      if (sSensorCapabilities & OPT3_ON)
-      {
-        debugln("OPT3_ON");
-      }
-
-      sSensor[5].bSensorRec = false;
-      debugln("MQTT send Sensor5");
-    }
-    else
-    {
-      // TODO remove to for next loop
-      int i = 5;
-      if (sSensor[5].iTimeSinceLastRead > iSensorTimeout)
-      {
-        sprintf(cChannelName, "Sensor%i/Err", i);
-        mqttClient.publish(cChannelName, "1");
-        debugln("Error Sens5");
-        debugln(sSensor[5].iTimeSinceLastRead);
+        if (sSensor[i].iTimeSinceLastRead > iSensorTimeout)
+        {
+          sprintf(cChannelName, "Sensor%i/Err", i);
+          mqttClient.publish(cChannelName, "1");
+          sprintf(valueStr, "Error Sensor%i ", i);
+          debug(valueStr);
+          debugln(sSensor[i].iTimeSinceLastRead);
+        }
       }
     }
   }

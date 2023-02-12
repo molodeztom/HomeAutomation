@@ -43,13 +43,16 @@ History:
 20230209  V0.28:  c use int instead of float where possible to avoid loosing precision
 20230211  V0.29:  c remove unneeded debug functions, use char[] instead of string
 20230211  V0.30:  c rename float to int value names
+20230212  V0.31:  c send sensor capabilities over serial
+20230212  V0.32:  c send only valid values
+20230212  V0.33:  d calculate correct checksum only used values
 
 
  */
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 // 1 means debug on 0 means off
-#define DEBUG 0
+#define DEBUG 1
 #include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
@@ -75,7 +78,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.30";
+const String sSoftware = "HubESPNow V0.33";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -312,6 +315,7 @@ void setup()
   // local sensor always read used for registration of new sensor
   sSensor[0].bSensorRegistered = true;
   // initialize sensor capabilities TODO implement in in sensor to send its capabilities
+  // TODO uncomment if set productive
   sSensor[0].sSensorCapabilities = 0;
   sSensor[0].sSensorCapabilities = LIGHT_ON | ATMO_ON;
   sSensor[1].sSensorCapabilities = 0;
@@ -324,6 +328,7 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
+  sSensor[0].iLight = 10; //TODO remove when we connect a real light sensor
 
   // initialize pcf8574
   pcf857X.begin();
@@ -464,7 +469,6 @@ void loop()
   // Upload Temperature Humidity to MainStation every xSeconds
   if ((millis() - serialTransferTime > ulSendIntervall))
   {
-    debugln("Send to Main Station");
     sendDataToMainStation();
     serialTransferTime = millis();
   }
@@ -482,7 +486,13 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
   iChannelNr = sESPReceive.iSensorChannel;
   iLastReceivedChannel = iChannelNr; // remember last channel to detect new sensor
-  // depending on channel fill values. 0 is local sensor and not used here
+                                     // depending on channel fill values. 0 is local sensor and not used here
+  debugln("Received Data");
+  debugln("MAC Adress: ");
+  debugln(sSensor[iChannelNr].sMacAddress);
+  debug("Channel nr.:");
+  debugln(iChannelNr);
+
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
 
@@ -491,9 +501,10 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     if (sSensor[iChannelNr].sSensorCapabilities & TEMPA_ON)
     {
       sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorrA[iChannelNr]) * 100);
-      debugln("capabilities TempAOn");
+      debug("Temperature A: ");
+      debugln(sSensor[iChannelNr].iTempA);
     }
-        if (sSensor[iChannelNr].sSensorCapabilities & TEMPB_ON)
+    if (sSensor[iChannelNr].sSensorCapabilities & TEMPB_ON)
     {
       sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempB + fTempCorrB[iChannelNr]) * 100);
       debugln("capabilities TempBOn");
@@ -501,15 +512,20 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     if (sSensor[iChannelNr].sSensorCapabilities & HUMI_ON)
     {
       sSensor[iChannelNr].iHumi = roundf(sESPReceive.fESPNowHumi * 100);
-      debugln("capabilities HumiOn");
+      debug("Humidity: ");
+      debugln(sSensor[iChannelNr].iHumi);
     }
     if (sSensor[iChannelNr].sSensorCapabilities & VOLT_ON)
     {
       sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
-      debugln("capabilities VoltOn");
+      debug("Batt V: ");
+      debugln(sSensor[iChannelNr].iVolt);
     }
 
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
+    debug(" min since last read: ");
+    debugln(iLastSSinceLastRead);
+ 
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
     sSensor[iChannelNr].bSensorRec = true;
     if (sSensor[iLastReceivedChannel].bSensorRegistered == false)
@@ -523,21 +539,6 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
       sSensor[iChannelNr].sMacAddress = macAddr;
       formatNewSensorData();
     }
-
-    debugln("Received Data");
-    debugln("MAC Adress: ");
-    debugln(sSensor[iChannelNr].sMacAddress);
-    debug("Channel nr.:");
-    debugln(iChannelNr);
-    debug("Temperature A: ");
-    debugln(sSensor[iChannelNr].iTempA);
-    debug("Humidity: ");
-    debugln(sSensor[iChannelNr].iHumi);
-    debug("Batt V: ");
-    debugln(sSensor[iChannelNr].iVolt);
-    debug(iLastSSinceLastRead);
-    debugln(" min since last read ");
-    debugln(iLastSSinceLastRead);
   }
 };
 
@@ -550,8 +551,10 @@ void sendDataToMainStation()
 #ifdef DEBUG
   char output[256];
 #endif
+  debugln("Send to Main Station");
   int iCheckSum = 0;
   StaticJsonDocument<capacity> jsonDocument;
+
   // change to array
   for (int n = 0; n < nMaxSensors; n++)
   {
@@ -562,26 +565,49 @@ void sendDataToMainStation()
       debug("Send Sensor Nr.: ");
       debugln(n);
       // Checksum with 100 times values
-      iCheckSum = sSensor[n].iTempA + sSensor[n].iHumi + sSensor[n].iVolt + sSensor[n].iLight + sSensor[n].iAtmo + sSensor[n].sSensorCapabilities;
-      debugln("checksum: ");
-      debugln(iCheckSum);
-     //JSON with values * 100 in int format
-      //TODO send onlz values the sensor supports
+      iCheckSum = sSensor[n].sSensorCapabilities;
+
+      // JSON with values * 100 in int format
+      // send only values the sensor supports capabilities not evaluated since there will be invalid values anyway
       jsonDocument.clear();
       jsonDocument["sensor"] = n;
       jsonDocument["time"] = serialCounter++;
-      jsonDocument["iTempA"] = sSensor[n].iTempA;
-      jsonDocument["iHumi"] = sSensor[n].iHumi;
-      jsonDocument["iVolt"] = sSensor[n].iVolt;
-      jsonDocument["iLight"] = sSensor[n].iLight;
-      jsonDocument["iAtmo"] = sSensor[n].iAtmo;
       jsonDocument["SensCap"] = sSensor[n].sSensorCapabilities;
+
+      // check value plausibility
+      if ((sSensor[n].iTempA < 4000) && (sSensor[n].iTempA > -4000))
+      {
+        jsonDocument["iTempA"] = sSensor[n].iTempA;
+        iCheckSum += sSensor[n].iTempA;
+      }
+      if ((sSensor[n].iHumi < 10000) && (sSensor[n].iHumi > 300))
+      {
+        jsonDocument["iHumi"] = sSensor[n].iHumi;
+        iCheckSum += sSensor[n].iHumi;
+      }
+      if ((sSensor[n].iVolt < 500) && (sSensor[n].iVolt > 100))
+      {
+        jsonDocument["iVolt"] = sSensor[n].iVolt;
+        iCheckSum += sSensor[n].iVolt;
+      }
+      if ((sSensor[n].iLight < 500) && (sSensor[n].iLight >= 0))
+      {
+        jsonDocument["iLight"] = sSensor[n].iLight;
+        iCheckSum += sSensor[n].iLight;
+      }
+      if ((sSensor[n].iAtmo < 10000) && (sSensor[n].iAtmo > 1000))
+      {
+        jsonDocument["iAtmo"] = sSensor[n].iAtmo;
+        iCheckSum += sSensor[n].iAtmo;
+      }
       jsonDocument["iCSum"] = iCheckSum;
+      debugln("checksum: ");
+      debugln(iCheckSum);
+
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
       serializeJson(jsonDocument, output);
 
-      // serializeJson(jsonDocument, swSer);
       swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);

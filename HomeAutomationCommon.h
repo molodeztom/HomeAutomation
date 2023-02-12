@@ -10,6 +10,7 @@ Used in WeatherStation and HomeServer
 20230115  V1.2  nMaxSensors
 20230211  V1.3  rename float to int variable names
 20230212  V1.4  sensor capabilities
+20230212  V1.5  d do not set iLight to 0 on unused sensors
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
@@ -49,10 +50,10 @@ const int httpPort = 80;
 /***************************
  * Measurement Variables
  **************************/
-const float InvalidMeasurement = 9999; // value set when a value was not correctly received via serial and JSON
-const int nMaxSensors = 10;            // max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
+const float InvalidMeasurement = 99999; // value set when a value was not correctly received via serial and JSON
+const int nMaxSensors = 10;             // max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
 // used for ESP Now Data protocol same for sensors and ESPNowHub
-//TODO add interface version add sensor capabilities do it when programming a new sensor
+// TODO add interface version add sensor capabilities do it when programming a new sensor
 struct ESPNOW_DATA_STRUCTURE
 {
   int iSensorChannel = 99;  // default for none received
@@ -84,8 +85,9 @@ struct SENSOR_DATA
   int iHumi = InvalidMeasurement;
   int iVolt = InvalidMeasurement;
   int iAtmo = InvalidMeasurement;
+  int iLight = InvalidMeasurement;
   String sMacAddress = "0000000000000000000";
-  int iLight = 0;
+
   bool bSensorRec = false; // true when valid sensor data received in time frame
   // int iSensorCnt = 6;      //Counter for timeout no values after some time renamed
   bool bSensorRegistered = false; // true when sensor is first time received
