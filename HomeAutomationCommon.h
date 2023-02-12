@@ -8,6 +8,7 @@ Used in WeatherStation and HomeServer
 20200522  V1.0  Stable error handling and messaging
 20200627  V1.1  Sensor #5 added   
 20230115  V1.2  nMaxSensors   
+20230211  V1.3  rename float to int variable names
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
@@ -49,15 +50,27 @@ const int httpPort = 80;
  **************************/
 const float InvalidMeasurement = 9999; //value set when a value was not correctly received via serial and JSON
 const int nMaxSensors = 10; //max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
+//used for ESP Now Data protocol same for sensors and ESPNowHub
+struct ESPNOW_DATA_STRUCTURE
+{
+  int iSensorChannel = 99;  // default for none received
+  float fESPNowTempA = -99; // Aussen A
+  float fESPNowTempB = -99; // Aussen B
+  float fESPNowHumi = -99;
+  float fESPNowVolt = -99; // Batterie Sensor
+};
+
+
+//used for local storage in ESPNowHub
 struct SENSOR_DATA
 {
     int iSensorChannel = nMaxSensors +1;
-    float fTempA = InvalidMeasurement;
-    float fTempB = InvalidMeasurement;
-    float fTempC = InvalidMeasurement;
-    float fHumi = InvalidMeasurement;
-    float fVolt = InvalidMeasurement;
-    float fAtmo = InvalidMeasurement;
+    int iTempA = InvalidMeasurement;
+    int iTempB = InvalidMeasurement;
+    int iTempC = InvalidMeasurement;
+    int iHumi = InvalidMeasurement;
+    int iVolt = InvalidMeasurement;
+    int iAtmo = InvalidMeasurement;
     String sMacAddress = "0000000000000000000";
     int iLight = 0;
     bool bSensorRec = false; //true when valid sensor data received in time frame
