@@ -46,7 +46,7 @@ History:
 20230212  V0.31:  c send sensor capabilities over serial
 20230212  V0.32:  c send only valid values
 20230212  V0.33:  d calculate correct checksum only used values
-20230212  V1.00:  works with 2 different sensors now 
+20230212  V1.00:  works with 2 different sensors now
 
 
  */
@@ -144,7 +144,22 @@ enum eProgramModes
   aPopen,
   oTAActive
 };
+enum eMenuLevel1
+{
+  eSensorValue,
+  eSensorDetail
+};
+enum eMenuLevel2
+{
+  eSensorDetailA,
+  eSensorVolt,
+  eBack
+};
+
 eProgramModes ProgramMode = normal;
+eMenuLevel1 MenuLevel1 = eSensorValue;
+eMenuLevel2 MenuLevel2 = eSensorDetailA;
+
 bool bOTARunning = false; // true if OTA already running to prevent stop
 
 /***************************
@@ -175,6 +190,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len);
 int iPCF857XAdr = 0x20;
 bool LedOn = false;
 bool bKeyPressed = false;
+
 PCF8574 pcf857X(iPCF857XAdr);
 
 /***************************
@@ -189,8 +205,12 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define SW3 P2
 #define SW4 P3
 
-long lswitchReadTime = 0;                                // Timing
-const unsigned long ulSwitchReadInterval = 0.4 * 1000UL; // Time until switch is read next time in s TIMER
+long lswitchReadTime = 0;                               // Timing
+const unsigned long ulSwitchReadInterval = 0.1 * 1000UL; // Time until switch is read next time in s TIMER
+// timing debounce switches, set when any switch pressed next switch event blocked
+long lDebounceTime = 0;
+const unsigned long ulDebounceInterval = 2 * 1000UL;
+bool bSwitchBlocked = false; // does not read key when true for some time time is DebounceInterval
 
 /***************************
  * Display Settings
@@ -329,7 +349,7 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-  sSensor[0].iLight = 10; //TODO remove when we connect a real light sensor
+  sSensor[0].iLight = 10; // TODO remove when we connect a real light sensor
 
   // initialize pcf8574
   pcf857X.begin();
@@ -403,14 +423,19 @@ void loop()
     formatTempExt();
     lreadTime = millis();
   }
-
+  if ((millis() - lDebounceTime > ulDebounceInterval))
+  {
+    bSwitchBlocked = false;
+    lDebounceTime = millis();
+  }
   // Read input switches every x seconds
   if (millis() - lswitchReadTime > ulSwitchReadInterval)
   {
-    if (pcf857X.digitalRead(SW2) == HIGH)
+    if ((pcf857X.digitalRead(SW2) == HIGH) && (bSwitchBlocked == false))
     {
       // SW2 pressed starts AP to add more sensors
       // only in normal mode e.g. do not activate while in OTA
+      bSwitchBlocked = true;
       if (ProgramMode == normal)
       {
         ledOn(LEDGN);
@@ -442,6 +467,7 @@ void loop()
         ESP.restart();
       }
     }
+
     lswitchReadTime = millis();
   }
 
@@ -526,7 +552,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
     debug("min since last read: ");
     debugln(iLastSSinceLastRead);
- 
+
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
     sSensor[iChannelNr].bSensorRec = true;
     if (sSensor[iLastReceivedChannel].bSensorRegistered == false)
@@ -575,7 +601,7 @@ void sendDataToMainStation()
       jsonDocument["time"] = serialCounter++;
       jsonDocument["SensCap"] = sSensor[n].sSensorCapabilities;
 
-      //TODO remove
+      // TODO remove
       debugln(sSensor[n].iAtmo);
 
       // check value plausibility
@@ -599,7 +625,7 @@ void sendDataToMainStation()
         jsonDocument["iLight"] = sSensor[n].iLight;
         iCheckSum += sSensor[n].iLight;
       }
-      if ((sSensor[n].iAtmo < 120000 ) && (sSensor[n].iAtmo > 80000))
+      if ((sSensor[n].iAtmo < 120000) && (sSensor[n].iAtmo > 80000))
       {
         jsonDocument["iAtmo"] = sSensor[n].iAtmo;
         iCheckSum += sSensor[n].iAtmo;
