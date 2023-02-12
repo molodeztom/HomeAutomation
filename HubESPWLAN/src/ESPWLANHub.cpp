@@ -13,10 +13,11 @@ History:
 20230131  V0.2: + OTA
 20230131  V0.3: + use DEBUG macro
 20230204  V0.4: c use arrays for sensor, LED Blink, use timers
-20230311  V0.5: c receive values *100 as int to avoid float errors.
-20230311  V0.6: c rename float to int variables
-20230311  V0.7: c remove unneeded debug output
-20230311  V0.8: c all sensors float /100
+20230211  V0.5: c receive values *100 as int to avoid float errors.
+20230211  V0.6: c rename float to int variables
+20230211  V0.7: c remove unneeded debug output
+20230211  V0.8: c all sensors float /100
+20230212  V0.9: c MQTT send using array
 */
 
 #include <Arduino.h>
@@ -174,7 +175,6 @@ void loop()
   if ((millis() - lMQTTLoop > ulMQTTTimer))
   {
     mqttClient.loop(); // MQTT keep alive
-    debugln("MQTT Client loop");
     lMQTTLoop = millis();
   }
 }
@@ -242,8 +242,9 @@ void readJSONMessage()
 void sendMQTTMessage()
 {
   char valueStr[20]; // helper to convert string to MQTT char
+  char cChannelName[50];
   bool bError = false;
-  debugln("F: sendMQTT message");
+  debugln("sendMQTT message");
   if (!mqttClient.connected())
   {
     debug("MQTT not connected, rc=");
@@ -257,7 +258,7 @@ void sendMQTTMessage()
     else
     {
       debug("MQTT failed, rc=");
-      Serial.println(mqttClient.state());
+      debugln(mqttClient.state());
       bError = true;
     }
   }
@@ -367,27 +368,39 @@ void sendMQTTMessage()
     } // Sensor 5
     if (sSensor[5].bSensorRec == true)
     {
+      // cChannelName
+      // TODO: i in a for next loop
+      int i = 5;
+      sprintf(cChannelName, "Sensor%i/fTempA", i);
       dtostrf(float(sSensor[5].iTempA) / 100, 4, 3, valueStr);
-      mqttClient.publish("Sensor5/fTempA", valueStr);
+      mqttClient.publish(cChannelName, valueStr);
 
+      sprintf(cChannelName, "Sensor%i/fTempB", i);
       dtostrf(float(sSensor[5].iTempB) / 100, 4, 3, valueStr);
-      mqttClient.publish("Sensor5/fTempB", valueStr);
+      mqttClient.publish(cChannelName, valueStr);
 
+      sprintf(cChannelName, "Sensor%i/fVolt", i);
       dtostrf(float(sSensor[5].iVolt) / 100, 4, 3, valueStr);
-      mqttClient.publish("Sensor5/fVolt", valueStr);
+      mqttClient.publish(cChannelName, valueStr);
 
+      sprintf(cChannelName, "Sensor%i/fHumi", i);
       dtostrf(float(sSensor[5].iHumi) / 100, 4, 3, valueStr);
-      mqttClient.publish("Sensor5/fHumi", valueStr);
+      mqttClient.publish(cChannelName, valueStr);
 
       sSensor[5].bSensorRec = false;
       debugln("MQTT send Sensor5");
     }
     else
     {
+      // TODO remove to for next loop
+      int i = 5;
       if (sSensor[5].iTimeSinceLastRead > iSensorTimeout)
-        mqttClient.publish("Sensor5/Err", "1");
-      debugln("Error Sens5");
-      debugln(sSensor[5].iTimeSinceLastRead);
+      {
+        sprintf(cChannelName, "Sensor%i/Err", i);
+        mqttClient.publish(cChannelName, "1");
+        debugln("Error Sens5");
+        debugln(sSensor[5].iTimeSinceLastRead);
+      }
     }
   }
 }

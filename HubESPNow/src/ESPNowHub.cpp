@@ -49,7 +49,7 @@ History:
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 // 1 means debug on 0 means off
-#define DEBUG 1
+#define DEBUG 0
 #include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
@@ -145,8 +145,8 @@ bool bOTARunning = false; // true if OTA already running to prevent stop
  * ESP Now Settings
  **************************/
 // SSID Open for some time. Sensors can contact AP to connect. After that time sensor use stored MAC adress
-long lAPOpenTime = 0;       // Timing
-int sSecondsUntilClose = 0; // counter to display how long still open
+long lAPOpenTime = 0;                                // Timing
+int sSecondsUntilClose = 0;                          // counter to display how long still open
 const unsigned long ulAPOpenInterval = 120 * 1000UL; // time in sec TIMER
 
 // ESP Now
@@ -213,7 +213,6 @@ void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
 void sendDataToMainStation();
-
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -471,10 +470,10 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   // depending on channel fill values. 0 is local sensor and not used here
   if ((iChannelNr > 0) && (iChannelNr < nMaxSensors))
   {
-    
-    //recieve sensor TempA and instantly convert to int
+
+    // recieve sensor TempA and instantly convert to int
     debugln("received raw TempA: ");
-    
+
     sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempA + fTempCorr[iChannelNr]) * 100);
     sSensor[iChannelNr].iHumi = roundf(sESPReceive.fESPNowHumi * 100);
     sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
@@ -521,7 +520,7 @@ void sendDataToMainStation()
 #endif
   int iCheckSum = 0;
   StaticJsonDocument<capacity> jsonDocument;
-  // change to array 
+  // change to array
   for (int n = 0; n < nMaxSensors; n++)
   {
     if (sSensor[n].bSensorRec == true)
@@ -530,10 +529,6 @@ void sendDataToMainStation()
       // checksum is computed at reciever as well
       debug("Send Sensor Nr.: ");
       debugln(n);
-      debugln("Serial print");
-      Serial.println(sSensor[n].iTempA, 10);
-      //  debugln("dtostrf print");
-      //  Serial.println(valueStr);
       // Checksum with 100 times values
       iCheckSum = sSensor[n].iTempA + sSensor[n].iHumi + sSensor[n].iVolt + sSensor[n].iLight + sSensor[n].iAtmo;
       debugln("checksum: ");
@@ -557,13 +552,9 @@ void sendDataToMainStation()
       swSer.print(endMarker); // $$ End Code
       delay(10);
       debugln("JSON: ");
-      Serial.println(output);
+      debugln(output);
       memset(&output, 0, 256);
-      /* #ifdef DEBUG
-            serializeJson(jsonDocument, output);
-            Serial.println(output);
-            memset(&output, 0, 256);
-      #endif */
+      
     }
   }
 }
@@ -771,4 +762,3 @@ void macAddrToString(byte *mac, char *str)
   // replace the final colon with a nul terminator
   str[-1] = '\0';
 }
-
