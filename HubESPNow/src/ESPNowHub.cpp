@@ -523,7 +523,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     }
 
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
-    debug(" min since last read: ");
+    debug("min since last read: ");
     debugln(iLastSSinceLastRead);
  
     sSensor[iChannelNr].iTimeSinceLastRead = 0;
@@ -580,7 +580,7 @@ void sendDataToMainStation()
         jsonDocument["iTempA"] = sSensor[n].iTempA;
         iCheckSum += sSensor[n].iTempA;
       }
-      if ((sSensor[n].iHumi < 10000) && (sSensor[n].iHumi > 300))
+      if ((sSensor[n].iHumi < 10500) && (sSensor[n].iHumi > 300))
       {
         jsonDocument["iHumi"] = sSensor[n].iHumi;
         iCheckSum += sSensor[n].iHumi;
@@ -601,8 +601,6 @@ void sendDataToMainStation()
         iCheckSum += sSensor[n].iAtmo;
       }
       jsonDocument["iCSum"] = iCheckSum;
-      debugln("checksum: ");
-      debugln(iCheckSum);
 
       sSensor[n].bSensorRec = false;
       swSer.print(startMarker); // $$ Start Code
@@ -611,7 +609,7 @@ void sendDataToMainStation()
       swSer.print(output);
       swSer.print(endMarker); // $$ End Code
       delay(10);
-      debugln("JSON: ");
+      debug("JSON: ");
       debugln(output);
       memset(&output, 0, 256);
     }
