@@ -127,6 +127,7 @@ char textSensTemp[nMaxSensors][22];
 String sNewSensorChannel;
 String sNewSensorMAC;
 bool bNewSensorFound = false;
+int iCurSensorDisplay = 0;
 
 int iLastReceivedChannel = 0;
 // Timing seconds for various uses
@@ -205,11 +206,11 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define SW3 P2
 #define SW4 P3
 
-long lswitchReadTime = 0;                               // Timing
+long lswitchReadTime = 0;                                // Timing
 const unsigned long ulSwitchReadInterval = 0.1 * 1000UL; // Time until switch is read next time in s TIMER
 // timing debounce switches, set when any switch pressed next switch event blocked
 long lDebounceTime = 0;
-const unsigned long ulDebounceInterval = 2 * 1000UL;
+const unsigned long ulDebounceInterval = 1 * 1000UL;
 bool bSwitchBlocked = false; // does not read key when true for some time time is DebounceInterval
 
 /***************************
@@ -233,12 +234,20 @@ void ledOn(uint8_t LedNr);
 void ledOff(uint8_t LedNr);
 void openWifiAP();
 void updateDisplay();
+void drawSens0();
+void drawSens1();
+void drawSens2();
 void drawSens5Temp();
 void formatTempExt();
 void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
 void sendDataToMainStation();
+void handleSwitches();
+void handleSW1();
+void handleSW2();
+void handleSW3();
+void handleSW4();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -431,43 +440,7 @@ void loop()
   // Read input switches every x seconds
   if (millis() - lswitchReadTime > ulSwitchReadInterval)
   {
-    if ((pcf857X.digitalRead(SW2) == HIGH) && (bSwitchBlocked == false))
-    {
-      // SW2 pressed starts AP to add more sensors
-      // only in normal mode e.g. do not activate while in OTA
-      bSwitchBlocked = true;
-      if (ProgramMode == normal)
-      {
-        ledOn(LEDGN);
-        openWifiAP();
-      }
-      else if (ProgramMode == aPopen)
-      {
-        // SW 2 pressed again close AP
-        WiFi.softAPdisconnect();
-        ledOff(LEDGN);
-        ProgramMode = normal;
-      }
-    }
-    if (pcf857X.digitalRead(SW1) == HIGH)
-    {
-      // SW1 pressed starts OTA to update firmware
-      if (ProgramMode != oTAActive)
-      {
-        // not yet running
-        ledOn(LEDRT);
-        startOTA();
-        ledOff(LEDGN);
-      }
-      else if (bOTARunning == false)
-      {
-        // SW 1 pressed again stop update and reboot
-        debugln("OTA stopped");
-        ledOff(LEDGN);
-        ESP.restart();
-      }
-    }
-
+    handleSwitches();
     lswitchReadTime = millis();
   }
 
@@ -499,6 +472,87 @@ void loop()
     sendDataToMainStation();
     serialTransferTime = millis();
   }
+}
+void handleSW1()
+{
+  // SW1 pressed starts OTA to update firmware
+  if (ProgramMode != oTAActive)
+  {
+    // not yet running
+    ledOn(LEDRT);
+    startOTA();
+    ledOff(LEDGN);
+  }
+  else if (bOTARunning == false)
+  {
+    // SW 1 pressed again stop update and reboot
+    debugln("OTA stopped");
+    ledOff(LEDGN);
+    ESP.restart();
+  }
+}
+void handleSW2()
+{
+  // SW2 pressed starts AP to add more sensors
+  // only in normal mode e.g. do not activate while in OTA
+  bSwitchBlocked = true;
+  if (ProgramMode == normal)
+  {
+    ledOn(LEDGN);
+    openWifiAP();
+  }
+  else if (ProgramMode == aPopen)
+  {
+    // SW 2 pressed again close AP
+    WiFi.softAPdisconnect();
+    ledOff(LEDGN);
+    ProgramMode = normal;
+  }
+}
+
+void handleSW3()
+{
+  // change menu level 2
+  bSwitchBlocked = true;
+}
+void handleSW4()
+{
+  // change menu level 1
+  bSwitchBlocked = true;
+  iCurSensorDisplay++;
+  debug("Sensors Registered: ");
+  debugln(sSensor[0].bSensorRegistered);
+  debugln(sSensor[1].bSensorRegistered);
+  debugln(sSensor[2].bSensorRegistered);
+  debugln(sSensor[3].bSensorRegistered);
+  debugln(sSensor[4].bSensorRegistered);
+  debugln(sSensor[5].bSensorRegistered);
+  debugln(sSensor[6].bSensorRegistered);
+  debugln(sSensor[7].bSensorRegistered);
+  debugln(sSensor[8].bSensorRegistered);
+  debugln(sSensor[9].bSensorRegistered);
+
+  // skip unregistered sensors
+  while (sSensor[iCurSensorDisplay].bSensorRegistered == false && (iCurSensorDisplay <= nMaxSensors))
+  {
+    iCurSensorDisplay++;
+  }
+  if (iCurSensorDisplay > nMaxSensors || sSensor[iCurSensorDisplay].bSensorRegistered == false)
+    iCurSensorDisplay = 0;
+
+  debug("Display Sensor Nr: ");
+  debugln(iCurSensorDisplay);
+}
+void handleSwitches()
+{
+  if ((pcf857X.digitalRead(SW1) == HIGH) && (bSwitchBlocked == false))
+    handleSW1();
+  if ((pcf857X.digitalRead(SW2) == HIGH) && (bSwitchBlocked == false))
+    handleSW2();
+  if ((pcf857X.digitalRead(SW3) == HIGH) && (bSwitchBlocked == false))
+    handleSW3();
+  if ((pcf857X.digitalRead(SW4) == HIGH) && (bSwitchBlocked == false))
+    handleSW4();
 }
 
 // Callback funktion for receiving data over ESPNOW
@@ -736,6 +790,37 @@ void formatTempExt()
   }
 }
 
+
+
+void drawSens0()
+{
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 38, "Lokale Werte");
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  // display.drawString(25, 5, textSensTemp[0]);
+}
+void drawSens1()
+{
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 38, "Sensor1");
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  // display.drawString(25, 5, textSensTemp[0]);
+}
+
+void drawSens2()
+{
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 38, "Sensor2");
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  // display.drawString(25, 5, textSensTemp[0]);
+}
+
 void drawSens5Temp()
 {
   display.setFont(ArialMT_Plain_10);
@@ -797,7 +882,24 @@ void updateDisplay()
   }
   if (ProgramMode == normal)
   {
-    drawSens5Temp();
+    switch (iCurSensorDisplay)
+    {
+    case 0:
+      drawSens0();
+      break;
+    case 1:
+      drawSens1();
+      break;
+    case 2:
+      drawSens2();
+      break;
+    case 5:
+      drawSens5Temp();
+      break;
+    default:
+      drawSens5Temp();
+      break;
+    }
   }
   // write the buffer to the display
   display.display();
