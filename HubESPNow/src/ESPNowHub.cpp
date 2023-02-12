@@ -574,6 +574,9 @@ void sendDataToMainStation()
       jsonDocument["time"] = serialCounter++;
       jsonDocument["SensCap"] = sSensor[n].sSensorCapabilities;
 
+      //TODO remove
+      debugln(sSensor[n].iAtmo);
+
       // check value plausibility
       if ((sSensor[n].iTempA < 4000) && (sSensor[n].iTempA > -4000))
       {
@@ -595,7 +598,7 @@ void sendDataToMainStation()
         jsonDocument["iLight"] = sSensor[n].iLight;
         iCheckSum += sSensor[n].iLight;
       }
-      if ((sSensor[n].iAtmo < 10000) && (sSensor[n].iAtmo > 1000))
+      if ((sSensor[n].iAtmo < 120000 ) && (sSensor[n].iAtmo > 80000))
       {
         jsonDocument["iAtmo"] = sSensor[n].iAtmo;
         iCheckSum += sSensor[n].iAtmo;
@@ -631,7 +634,7 @@ void ledOff(uint8_t LedNr)
 void readAtmosphere()
 {
   sSensor[0].iAtmo = bmp.readPressure();
-  sSensor[0].iAtmo = sSensor[0].iAtmo / 100;
+  sSensor[0].iAtmo = sSensor[0].iAtmo;
   sSensor[0].bSensorRec = true;
 #if DEBUG == 1
   int bmpTemp;

@@ -20,6 +20,7 @@ History:
 20230212  V0.9:   c MQTT send using array
 20230212  V0.10:  c recieve sensor capabilities over serial use loop for mqtt send
 20230212  V0.11:  d calculate correct checksum only used values
+20230212  V0.12:  d add iAtmo to checksum only once
 */
 
 #include <Arduino.h>
@@ -34,7 +35,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.11";
+const String sSoftware = "ESPWLANHub V0.12";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -240,8 +241,6 @@ void readJSONMessage()
       iCheckSumLocal += sSensor[iSensor].iLight;
     if (sSensor[iSensor].iAtmo != InvalidMeasurement)
       iCheckSumLocal += sSensor[iSensor].iAtmo;
-    if (sSensor[iSensor].iAtmo != InvalidMeasurement)
-      iCheckSumLocal += sSensor[iSensor].iAtmo;
 
     if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
@@ -294,22 +293,27 @@ void sendMQTTMessage()
       {
         uint16_t sSensorCapabilities = sSensor[i].sSensorCapabilities;
 
-        debug("Sensor Capabilities");
+        debug("Sensor Capabilities: ");
         debugln(sSensorCapabilities);
+        debugln("channels sent: ");
 
         if (sSensorCapabilities & TEMPA_ON)
         {
           sprintf(cChannelName, "Sensor%i/fTempA", i);
           dtostrf(float(sSensor[i].iTempA) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
         if (sSensorCapabilities & TEMPB_ON)
         {
           sprintf(cChannelName, "Sensor%i/fTempB", i);
           dtostrf(float(sSensor[i].iTempB) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
 
         if (sSensorCapabilities & VOLT_ON)
@@ -317,7 +321,9 @@ void sendMQTTMessage()
           sprintf(cChannelName, "Sensor%i/fVolt", i);
           dtostrf(float(sSensor[i].iVolt) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
 
         if (sSensorCapabilities & HUMI_ON)
@@ -325,7 +331,9 @@ void sendMQTTMessage()
           sprintf(cChannelName, "Sensor%i/fHumi", i);
           dtostrf(float(sSensor[i].iHumi) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
 
         if (sSensorCapabilities & LIGHT_ON)
@@ -333,14 +341,18 @@ void sendMQTTMessage()
           sprintf(cChannelName, "Sensor%i/iLight", i);
           dtostrf(float(sSensor[i].iLight) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
         if (sSensorCapabilities & ATMO_ON)
         {
           sprintf(cChannelName, "Sensor%i/iAtmo", i);
           dtostrf(float(sSensor[i].iAtmo) / 100, 4, 3, valueStr);
           mqttClient.publish(cChannelName, valueStr);
-          debugln(cChannelName);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
         if (sSensorCapabilities & OPT1_ON)
         {

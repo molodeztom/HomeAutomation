@@ -50,7 +50,7 @@ const int httpPort = 80;
 /***************************
  * Measurement Variables
  **************************/
-const float InvalidMeasurement = 99999; // value set when a value was not correctly received via serial and JSON
+const float InvalidMeasurement = 999999; // value set when a value was not correctly received via serial and JSON
 const int nMaxSensors = 10;             // max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
 // used for ESP Now Data protocol same for sensors and ESPNowHub
 // TODO add interface version add sensor capabilities do it when programming a new sensor
