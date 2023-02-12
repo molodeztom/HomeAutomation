@@ -21,6 +21,7 @@ History:
 20230212  V0.10:  c recieve sensor capabilities over serial use loop for mqtt send
 20230212  V0.11:  d calculate correct checksum only used values
 20230212  V0.12:  d add iAtmo to checksum only once
+20230212  V1.00:  works with 2 different sensors now 
 */
 
 #include <Arduino.h>
@@ -78,7 +79,7 @@ bool bLedState = false;
 
 // timing
 long lMQTTLoop = 0;
-const unsigned long ulMQTTTimer = 3 * 1000UL; // time in sec
+const unsigned long ulMQTTTimer = 1 * 1000UL; // time in sec
 long lOneMinuteTime = 0;
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec
 const int iSensorTimeout = 3;                       // minutes
@@ -109,7 +110,7 @@ void setup()
     Serial.printf("Connected, mac address: %02x:%02x:%02x:%02x:%02x:%02x\n", macAddr[0], macAddr[1], macAddr[2], macAddr[3], macAddr[4], macAddr[5]);
   }
   mqttClient.setServer(SERVER, SERVERPORT);
-  mqttClient.setKeepAlive(60);
+  mqttClient.setKeepAlive(10);
   // Set timeout counter to maximum to provoke error on startup
   for (int n = 0; n < nMaxSensors; n++)
   {

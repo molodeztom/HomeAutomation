@@ -46,6 +46,7 @@ History:
 20230212  V0.31:  c send sensor capabilities over serial
 20230212  V0.32:  c send only valid values
 20230212  V0.33:  d calculate correct checksum only used values
+20230212  V1.00:  works with 2 different sensors now 
 
 
  */

@@ -11,6 +11,7 @@ Used in WeatherStation and HomeServer
 20230211  V1.3  rename float to int variable names
 20230212  V1.4  sensor capabilities
 20230212  V1.5  d do not set iLight to 0 on unused sensors
+20230212  V2.0  works with 2 different sensors now 
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
