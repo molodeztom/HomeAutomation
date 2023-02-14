@@ -124,6 +124,10 @@ SoftwareSerial swSer(D9, D7, false);
 // Default display if any value becomes invalid. Invalid when for some time no value received
 
 char textSensTemp[nMaxSensors][22];
+char textSensHumi[nMaxSensors][22];
+char textSensAtmo[nMaxSensors][22];
+char textSensLight[nMaxSensors][22];
+
 String sNewSensorChannel;
 String sNewSensorMAC;
 bool bNewSensorFound = false;
@@ -147,14 +151,15 @@ enum eProgramModes
 };
 enum eMenuLevel1
 {
-  eSensorValue,
+  eSensorValue = 0,
   eSensorDetail
 };
 enum eMenuLevel2
 {
-  eSensorDetailA,
+  eSensorDetailA = 0,
   eSensorVolt,
-  eBack
+  eBack,
+  eEND
 };
 
 eProgramModes ProgramMode = normal;
@@ -237,7 +242,7 @@ void updateDisplay();
 void drawSens0();
 void drawSens1();
 void drawSens2();
-void drawSens5Temp();
+void drawSens5();
 void formatTempExt();
 void startOTA();
 void formatNewSensorData();
@@ -514,34 +519,48 @@ void handleSW3()
 {
   // change menu level 2
   bSwitchBlocked = true;
+  if (MenuLevel1 == eSensorValue)
+  {
+    MenuLevel1 = eSensorDetail;
+    MenuLevel2 = eSensorDetailA;
+    
+  }
+  if (MenuLevel1 == eSensorDetail && MenuLevel2 == eBack)
+  {
+    MenuLevel1 = eSensorValue;
+    MenuLevel2 = eSensorDetailA;
+  }
+  debugln("Switch 3 pressed");
+  debugln(MenuLevel1);
+  debugln(MenuLevel2);
 }
 void handleSW4()
 {
   // change menu level 1
   bSwitchBlocked = true;
-  iCurSensorDisplay++;
-  debug("Sensors Registered: ");
-  debugln(sSensor[0].bSensorRegistered);
-  debugln(sSensor[1].bSensorRegistered);
-  debugln(sSensor[2].bSensorRegistered);
-  debugln(sSensor[3].bSensorRegistered);
-  debugln(sSensor[4].bSensorRegistered);
-  debugln(sSensor[5].bSensorRegistered);
-  debugln(sSensor[6].bSensorRegistered);
-  debugln(sSensor[7].bSensorRegistered);
-  debugln(sSensor[8].bSensorRegistered);
-  debugln(sSensor[9].bSensorRegistered);
-
-  // skip unregistered sensors
-  while (sSensor[iCurSensorDisplay].bSensorRegistered == false && (iCurSensorDisplay <= nMaxSensors))
+  if (MenuLevel1 == eSensorValue)
   {
     iCurSensorDisplay++;
-  }
-  if (iCurSensorDisplay > nMaxSensors || sSensor[iCurSensorDisplay].bSensorRegistered == false)
-    iCurSensorDisplay = 0;
+    // skip unregistered sensors
+    while (sSensor[iCurSensorDisplay].bSensorRegistered == false && (iCurSensorDisplay <= nMaxSensors))
+    {
+      iCurSensorDisplay++;
+    }
+    if (iCurSensorDisplay > nMaxSensors || sSensor[iCurSensorDisplay].bSensorRegistered == false)
+      iCurSensorDisplay = 0;
 
-  debug("Display Sensor Nr: ");
-  debugln(iCurSensorDisplay);
+    debug("Display Sensor Nr: ");
+    debugln(iCurSensorDisplay);
+  }
+  if (MenuLevel1 == eSensorDetail)
+  {
+    debugln(MenuLevel2);
+    MenuLevel2 = (eMenuLevel2)(((int)MenuLevel2 + 1)% (eEND));
+    debugln(MenuLevel2);
+  }
+  debugln("Switch 4 pressed");
+  debugln(MenuLevel1);
+  debugln(MenuLevel2);
 }
 void handleSwitches()
 {
@@ -768,7 +787,6 @@ void formatTempExt()
   // if sensor not updated within time iSensTimeout is reached and no value displayed
   // and sensor has a valid first reading
   debugln("formatTempExt");
-
   for (int n = 0; n < nMaxSensors; n++)
   {
     if ((sSensor[n].iTimeSinceLastRead > iSensorTimeout) || (sSensor[n].bSensorRegistered == false))
@@ -785,50 +803,60 @@ void formatTempExt()
     else
     {
       // sensor found write a formatted string into display array
-      sprintf(textSensTemp[n], "%i.%02i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
+      // precision is controlled by the division 100 means 2 decimals 10 means 1 decimal
+      sprintf(textSensTemp[n], "%i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
+      sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
+      sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
+      debug("TempA: ");
+      debugln(textSensTemp[n]);
+      debug("Humi: ");
+      debugln(textSensHumi[n]);
+      debug("Atmo: ");
+      debugln(textSensAtmo[n]);
     }
   }
 }
 
-
-
 void drawSens0()
 {
+
+  display.setFont(ArialMT_Plain_16);
+  display.setTextAlignment(TEXT_ALIGN_RIGHT);
+  display.drawString(115, 10, textSensAtmo[0]);
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 38, "Lokale Werte");
-  display.setFont(ArialMT_Plain_24);
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
-  // display.drawString(25, 5, textSensTemp[0]);
+  display.drawString(61, 54, "Lokale Werte");
 }
 void drawSens1()
 {
-  display.setFont(ArialMT_Plain_10);
-  display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 38, "Sensor1");
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  // display.drawString(25, 5, textSensTemp[0]);
+  display.drawString(25, 5, textSensTemp[1]);
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 54, "Sensor1");
 }
 
 void drawSens2()
 {
-  display.setFont(ArialMT_Plain_10);
-  display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 38, "Sensor2");
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  // display.drawString(25, 5, textSensTemp[0]);
+  display.drawString(25, 5, textSensTemp[2]);
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 54, "Schlafzimmer");
 }
 
-void drawSens5Temp()
+void drawSens5()
 {
-  display.setFont(ArialMT_Plain_10);
-  display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 38, "Arbeitszimmer");
+
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(25, 5, textSensTemp[5]);
+  display.drawString(25, 2, textSensTemp[5]);
+  display.drawString(25, 28, textSensHumi[5]);
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 54, "Arbeitszimmer");
 }
 
 void formatNewSensorData()
@@ -894,10 +922,10 @@ void updateDisplay()
       drawSens2();
       break;
     case 5:
-      drawSens5Temp();
+      drawSens5();
       break;
     default:
-      drawSens5Temp();
+      drawSens5();
       break;
     }
   }
