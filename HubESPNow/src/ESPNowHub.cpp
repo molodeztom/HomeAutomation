@@ -47,6 +47,7 @@ History:
 20230212  V0.32:  c send only valid values
 20230212  V0.33:  d calculate correct checksum only used values
 20230212  V1.00:  works with 2 different sensors now
+20230218  V1.01:  + Menu 2 levels
 
 
  */
@@ -253,6 +254,9 @@ void handleSW1();
 void handleSW2();
 void handleSW3();
 void handleSW4();
+void drawSensDetail();
+void drawSensDetailBack();
+void drawSensVolt();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -523,7 +527,6 @@ void handleSW3()
   {
     MenuLevel1 = eSensorDetail;
     MenuLevel2 = eSensorDetailA;
-    
   }
   if (MenuLevel1 == eSensorDetail && MenuLevel2 == eBack)
   {
@@ -555,7 +558,7 @@ void handleSW4()
   if (MenuLevel1 == eSensorDetail)
   {
     debugln(MenuLevel2);
-    MenuLevel2 = (eMenuLevel2)(((int)MenuLevel2 + 1)% (eEND));
+    MenuLevel2 = (eMenuLevel2)(((int)MenuLevel2 + 1) % (eEND));
     debugln(MenuLevel2);
   }
   debugln("Switch 4 pressed");
@@ -859,6 +862,48 @@ void drawSens5()
   display.drawString(61, 54, "Arbeitszimmer");
 }
 
+void drawSensDetail()
+{
+  String sSensorMAC;
+  String sSensorChannel;
+  String sSensorLastRecieve;
+
+  sSensorChannel = String(sSensor[iCurSensorDisplay].iSensorChannel);
+  sSensorMAC = (sSensor[iCurSensorDisplay].sMacAddress);
+  sSensorLastRecieve = String(sSensor[iCurSensorDisplay].iTimeSinceLastRead);
+
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(5, 2, "Kanal: ");
+  display.drawString(40, 2, sSensorChannel);
+
+  display.drawString(5, 12, "MAC: ");
+  display.drawString(35, 12, sSensorMAC);
+
+  display.drawString(5, 22, "Empfang: ");
+  display.drawString(50, 22, sSensorLastRecieve);
+
+  display.drawString(50, 54, "Sensor Details");
+}
+
+void drawSensVolt()
+{
+  String sSensorVolt;
+  sSensorVolt = String(sSensor[iCurSensorDisplay].iVolt);
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(5, 2, "Batt: ");
+  display.drawString(30, 2, sSensorVolt);
+  display.drawString(10, 54, "Sensor Batt");
+}
+
+void drawSensDetailBack()
+{
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(25, 10, "Zurück");
+}
+
 void formatNewSensorData()
 {
   // When a sensor connects for the first time in AP mode output data
@@ -910,23 +955,44 @@ void updateDisplay()
   }
   if (ProgramMode == normal)
   {
-    switch (iCurSensorDisplay)
+    if (MenuLevel1 == eSensorValue)
     {
-    case 0:
-      drawSens0();
-      break;
-    case 1:
-      drawSens1();
-      break;
-    case 2:
-      drawSens2();
-      break;
-    case 5:
-      drawSens5();
-      break;
-    default:
-      drawSens5();
-      break;
+      switch (iCurSensorDisplay)
+      {
+      case 0:
+        drawSens0();
+        break;
+      case 1:
+        drawSens1();
+        break;
+      case 2:
+        drawSens2();
+        break;
+      case 5:
+        drawSens5();
+        break;
+      default:
+        drawSens5();
+        break;
+      }
+    }
+    if (MenuLevel1 == eSensorDetail)
+    {
+      switch (MenuLevel2)
+      {
+      case eSensorDetailA:
+        drawSensDetail();
+        break;
+      case eSensorVolt:
+        drawSensVolt();
+        break;
+      case eBack:
+        drawSensDetailBack();
+        break;
+      default:
+        drawSens5();
+        break;
+      }
     }
   }
   // write the buffer to the display
