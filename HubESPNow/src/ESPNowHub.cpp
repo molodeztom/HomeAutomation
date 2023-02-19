@@ -48,6 +48,7 @@ History:
 20230212  V0.33:  d calculate correct checksum only used values
 20230212  V1.00:  works with 2 different sensors now
 20230218  V1.01:  + Menu 2 levels Test
+20230219  V1.02:  + Menu 2 sensor details and details 2
 
 
 
@@ -81,7 +82,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V0.33";
+const String sSoftware = "HubESPNow V1.02";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -141,7 +142,7 @@ long lSecondsTime = 0;
 const unsigned long ulSecondsInterval = 1 * 1000UL; // time in sec TIMER
 const unsigned long ulOneMinuteTimer = 60 * 1000UL; // time in sec TIMER
 
-const int iSensorTimeout = 2;
+const int iSensorTimeout = 240; // time in sec
 
 // program is running on one of these modes
 // normal, AP Open to add a new sensor, OTA only active to do an OTA
@@ -245,7 +246,7 @@ void drawSens0();
 void drawSens1();
 void drawSens2();
 void drawSens5();
-void formatTempExt();
+void formatSensData();
 void startOTA();
 void formatNewSensorData();
 void macAddrToString(byte *mac, char *str);
@@ -257,7 +258,7 @@ void handleSW3();
 void handleSW4();
 void drawSensDetail();
 void drawSensDetailBack();
-void drawSensVolt();
+void drawSensDetail2();
 
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
@@ -419,6 +420,10 @@ void loop()
     {
       sSecondsUntilClose--;
     }
+    for (int n = 0; n < nMaxSensors; n++)
+    {
+      sSensor[n].iTimeSinceLastRead++;
+    }
     // digitalWrite(LED_BUILTIN, HIGH);
     lSecondsTime = millis();
   }
@@ -439,7 +444,7 @@ void loop()
     debugln("Readlocal");
     // readLight();
     readAtmosphere();
-    formatTempExt();
+    formatSensData();
     lreadTime = millis();
   }
   if ((millis() - lDebounceTime > ulDebounceInterval))
@@ -467,15 +472,12 @@ void loop()
   }
 
   // Every second check sensor readings, if no reading count up and then do not display
-  if ((millis() - lSensorValidTime > ulOneMinuteTimer))
-  {
-    //
-    for (int n = 0; n < nMaxSensors; n++)
-    {
-      sSensor[n].iTimeSinceLastRead++;
-    }
-    lSensorValidTime = millis();
-  }
+  /*  if ((millis() - lSensorValidTime > ulOneMinuteTimer))
+   {
+     //
+
+     lSensorValidTime = millis();
+   } */
   // Upload Temperature Humidity to MainStation every xSeconds
   if ((millis() - serialTransferTime > ulSendIntervall))
   {
@@ -534,9 +536,6 @@ void handleSW3()
     MenuLevel1 = eSensorValue;
     MenuLevel2 = eSensorDetailA;
   }
-  debugln("Switch 3 pressed");
-  debugln(MenuLevel1);
-  debugln(MenuLevel2);
 }
 void handleSW4()
 {
@@ -562,9 +561,6 @@ void handleSW4()
     MenuLevel2 = (eMenuLevel2)(((int)MenuLevel2 + 1) % (eEND));
     debugln(MenuLevel2);
   }
-  debugln("Switch 4 pressed");
-  debugln(MenuLevel1);
-  debugln(MenuLevel2);
 }
 void handleSwitches()
 {
@@ -678,9 +674,6 @@ void sendDataToMainStation()
       jsonDocument["time"] = serialCounter++;
       jsonDocument["SensCap"] = sSensor[n].sSensorCapabilities;
 
-      // TODO remove
-      debugln(sSensor[n].iAtmo);
-
       // check value plausibility
       if ((sSensor[n].iTempA < 4000) && (sSensor[n].iTempA > -4000))
       {
@@ -740,6 +733,7 @@ void readAtmosphere()
   sSensor[0].iAtmo = bmp.readPressure();
   sSensor[0].iAtmo = sSensor[0].iAtmo;
   sSensor[0].bSensorRec = true;
+  sSensor[0].iTimeSinceLastRead = 0;
 #if DEBUG == 1
   int bmpTemp;
   bmpTemp = bmp.readTemperature();
@@ -786,11 +780,12 @@ void wifiConnectStation()
 called every x seconds to update values for all nMaxSensors
 create string for display output
 Local sensor has no recieve timeout */
-void formatTempExt()
+void formatSensData()
 {
   // if sensor not updated within time iSensTimeout is reached and no value displayed
   // and sensor has a valid first reading
-  debugln("formatTempExt");
+  debugln("formatSensData");
+
   for (int n = 0; n < nMaxSensors; n++)
   {
     if ((sSensor[n].iTimeSinceLastRead > iSensorTimeout) || (sSensor[n].bSensorRegistered == false))
@@ -808,9 +803,11 @@ void formatTempExt()
     {
       // sensor found write a formatted string into display array
       // precision is controlled by the division 100 means 2 decimals 10 means 1 decimal
-      sprintf(textSensTemp[n], "%i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
+ 
+      sprintf(textSensTemp[n], "%2.i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
       sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
       sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
+
       debug("TempA: ");
       debugln(textSensTemp[n]);
       debug("Humi: ");
@@ -820,25 +817,27 @@ void formatTempExt()
     }
   }
 }
+// TODO make this generic according to sensor capabilities and sensor name from array
 
 void drawSens0()
 {
 
   display.setFont(ArialMT_Plain_16);
   display.setTextAlignment(TEXT_ALIGN_RIGHT);
-  display.drawString(115, 10, textSensAtmo[0]);
+  display.drawString(110, 10, textSensAtmo[0]);
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 54, "Lokale Werte");
+  display.drawString(61, 54, "Lokal");
 }
 void drawSens1()
 {
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(25, 5, textSensTemp[1]);
+  display.drawString(25, 2, textSensTemp[1]);
+  display.drawString(25, 28, textSensHumi[1]);
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(61, 54, "Sensor1");
+  display.drawString(61, 54, "Aussen");
 }
 
 void drawSens2()
@@ -867,42 +866,74 @@ void drawSensDetail()
 {
   String sSensorMAC;
   String sSensorChannel;
-  String sSensorLastRecieve;
+  char textLastRead[20];
 
   sSensorChannel = String(sSensor[iCurSensorDisplay].iSensorChannel);
   sSensorMAC = (sSensor[iCurSensorDisplay].sMacAddress);
-  sSensorLastRecieve = String(sSensor[iCurSensorDisplay].iTimeSinceLastRead);
+  // format last time read into min:sec
+  // TODO clean
+  // int sec = (sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60;
+  // sprintf(textLastRead, "%i.%i ", (((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), (int)((sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60)));
+  // sprintf(textLastRead, " %i:%.2u", ((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), sec);
+  sprintf(textLastRead, " %i:%.2u", ((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), (sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60);
 
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.drawString(5, 2, "Kanal: ");
   display.drawString(40, 2, sSensorChannel);
+  if (iCurSensorDisplay == 0)
+  {
+    display.drawString(5, 12, "MAC: Lokal");
+  }
+  else
+  {
+    display.drawString(5, 12, "MAC: ");
+    display.drawString(35, 12, sSensorMAC);
+  }
 
-  display.drawString(5, 12, "MAC: ");
-  display.drawString(35, 12, sSensorMAC);
+  display.drawString(5, 22, "Letzter Empfang: ");
+  display.drawString(85, 22, textLastRead);
 
-  display.drawString(5, 22, "Empfang: ");
-  display.drawString(50, 22, sSensorLastRecieve);
-
-  display.drawString(50, 54, "Sensor Details");
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(54, 54, "Sensor Details 1");
 }
 
-void drawSensVolt()
+void drawSensDetail2()
 {
-  String sSensorVolt;
-  sSensorVolt = String(sSensor[iCurSensorDisplay].iVolt);
-  display.setFont(ArialMT_Plain_10);
+  char cTextSensorVolt[20];
+  char textCapabilities[50];
+  char textCapabilities1[50];
+  uint16_t iSensCap = sSensor[iCurSensorDisplay].sSensorCapabilities;
+  // convert bit mask into text
+  sprintf(textCapabilities, "TempA: %s Humi: %s Volt: %s ", (iSensCap & TEMPA_ON) ? "1" : "0", (iSensCap & HUMI_ON) ? "1" : "0", (iSensCap & VOLT_ON) ? "1" : "0");
+  sprintf(textCapabilities1, "Atmo: %s TempB: %s Light: %s ", (iSensCap & ATMO_ON) ? "1" : "0", (iSensCap & TEMPB_ON) ? "1" : "0", (iSensCap & LIGHT_ON) ? "1" : "0");
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(5, 2, "Batt: ");
-  display.drawString(30, 2, sSensorVolt);
-  display.drawString(10, 54, "Sensor Batt");
+  display.setFont(ArialMT_Plain_10);
+
+  if (iCurSensorDisplay == 0)
+  {
+    display.drawString(5, 2, "USB");
+  }
+  else
+  {
+    sprintf(cTextSensorVolt, "%i.%i V", sSensor[iCurSensorDisplay].iVolt / 100, abs(sSensor[iCurSensorDisplay].iVolt) % 100);
+    display.drawString(5, 2, "Batt: ");
+    display.drawString(30, 2, cTextSensorVolt);
+  }
+
+  display.drawString(5, 12, "Sensor Werte: ");
+  display.drawString(5, 23, textCapabilities);
+  display.drawString(5, 33, textCapabilities1);
+
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(54, 54, "Sensor Details 2");
 }
 
 void drawSensDetailBack()
 {
   display.setFont(ArialMT_Plain_24);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.drawString(25, 10, "Zurück");
+  display.drawString(45, 10, "Zurück");
 }
 
 void formatNewSensorData()
@@ -931,7 +962,7 @@ void updateDisplay()
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   // test output millisec
-  display.drawString(128, 54, String(millis()));
+  // display.drawString(128, 54, String(millis()));
   // display flag for open AP
   if (ProgramMode == aPopen)
   {
@@ -939,7 +970,7 @@ void updateDisplay()
     display.drawString(80, 0, String(sSecondsUntilClose));
     if (bNewSensorFound == true)
     {
-      // display data of new sensor received
+
       display.setFont(ArialMT_Plain_10);
       display.drawString(0, 10, "last sensor added");
       display.drawString(0, 20, "Channel:");
@@ -985,7 +1016,7 @@ void updateDisplay()
         drawSensDetail();
         break;
       case eSensorVolt:
-        drawSensVolt();
+        drawSensDetail2();
         break;
       case eBack:
         drawSensDetailBack();
