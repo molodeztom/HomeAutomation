@@ -47,7 +47,8 @@ History:
 20230212  V0.32:  c send only valid values
 20230212  V0.33:  d calculate correct checksum only used values
 20230212  V1.00:  works with 2 different sensors now
-20230218  V1.01:  + Menu 2 levels
+20230218  V1.01:  + Menu 2 levels Test
+
 
 
  */
