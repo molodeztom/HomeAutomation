@@ -49,6 +49,8 @@ History:
 20230212  V1.00:  works with 2 different sensors now
 20230218  V1.01:  + Menu 2 levels Test
 20230219  V1.02:  + Menu 2 sensor details and details 2
+20231015  V1.03:  c Taktile switch order due to upside down assembly in case
+
 
 
 
@@ -82,7 +84,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.02";
+const String sSoftware = "HubESPNow V1.03";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -209,10 +211,10 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define LEDGN P5
 #define LEDBL P7
 #define LEDRT P4
-#define SW1 P0
-#define SW2 P1
-#define SW3 P2
-#define SW4 P3
+#define SW1 P3 //changed because ctrl pcb is mounted upside down
+#define SW2 P2
+#define SW3 P1
+#define SW4 P0
 
 long lswitchReadTime = 0;                                // Timing
 const unsigned long ulSwitchReadInterval = 0.1 * 1000UL; // Time until switch is read next time in s TIMER
@@ -318,7 +320,7 @@ void setup()
                        display.drawString(0, 10, "OTA Wait for Upload");
                        // write the buffer to the display
                        display.display();
-                       ledOn(LEDBL); });
+                       ledOn(LEDRT); });
 
   ArduinoOTA.onEnd([]()
                    {
@@ -326,7 +328,7 @@ void setup()
                     display.drawString(0, 10, "OTA Successful");
                     // write the buffer to the display
                     display.display();
-                    ledOff(LEDBL);
+                    ledOff(LEDRT);
                     delay(2000);
                     bOTARunning = false;
                   
@@ -432,7 +434,7 @@ void loop()
   if ((millis() - lAPOpenTime > ulAPOpenInterval) && ProgramMode == aPopen)
   {
     WiFi.softAPdisconnect();
-    ledOff(LEDGN);
+    ledOff(LEDGB);
     bNewSensorFound = false;
     ProgramMode = normal;
     debugln("AP disconnect");
@@ -491,15 +493,15 @@ void handleSW1()
   if (ProgramMode != oTAActive)
   {
     // not yet running
-    ledOn(LEDRT);
+    ledOn(LEDBL);
     startOTA();
-    ledOff(LEDGN);
+    ledOff(LEDBL);
   }
   else if (bOTARunning == false)
   {
     // SW 1 pressed again stop update and reboot
     debugln("OTA stopped");
-    ledOff(LEDGN);
+    ledOff(LEDBL);
     ESP.restart();
   }
 }
@@ -510,14 +512,14 @@ void handleSW2()
   bSwitchBlocked = true;
   if (ProgramMode == normal)
   {
-    ledOn(LEDGN);
+    ledOn(LEDGB);
     openWifiAP();
   }
   else if (ProgramMode == aPopen)
   {
     // SW 2 pressed again close AP
     WiFi.softAPdisconnect();
-    ledOff(LEDGN);
+    ledOff(LEDGB);
     ProgramMode = normal;
   }
 }
@@ -1040,7 +1042,7 @@ void startOTA()
   debugln("AP disconnect");
 
   WiFi.softAPdisconnect();
-  ledOff(LEDGN);
+  ledOff(LEDGB);
   ProgramMode = oTAActive;
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
