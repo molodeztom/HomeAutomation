@@ -50,6 +50,8 @@ History:
 20230218  V1.01:  + Menu 2 levels Test
 20230219  V1.02:  + Menu 2 sensor details and details 2
 20231015  V1.03:  c Taktile switch order due to upside down assembly in case
+20231015  V1.04:  c Add Light Sensor again multiply by 100 
+20231015  V1.05:  c Multiply by 500 is a max around 162240 and a low around 10 
 
 
 
@@ -84,7 +86,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.03";
+const String sSoftware = "HubESPNow V1.05";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -211,10 +213,16 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define LEDGN P5
 #define LEDBL P7
 #define LEDRT P4
+/*
 #define SW1 P3 //changed because ctrl pcb is mounted upside down
 #define SW2 P2
 #define SW3 P1
 #define SW4 P0
+*/
+#define SW1 P0 //TODO: remove tmp until red switch or label changed
+#define SW2 P1
+#define SW3 P2
+#define SW4 P3
 
 long lswitchReadTime = 0;                                // Timing
 const unsigned long ulSwitchReadInterval = 0.1 * 1000UL; // Time until switch is read next time in s TIMER
@@ -265,10 +273,10 @@ void drawSensDetail2();
 /***************************
  * Begin Atmosphere and iLightLocal Sensor Settings
  **************************/
-// void readLight();
+void readLight();
 void readAtmosphere();
 Adafruit_BMP085 bmp;
-// const int Light_ADDR = 0b0100011;                      // address:0x23
+const int Light_ADDR = 0b0100011;                      // address:0x23
 // const int Atom_ADDR = 0b1110111;                       // address:0x77
 long lreadTime = 0;
 const unsigned long ulSensReadInterval = 60 * 1000UL; // Timing Time to evaluate received sens values for display in s TIMER
@@ -371,7 +379,7 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-  sSensor[0].iLight = 10; // TODO remove when we connect a real light sensor
+  //sSensor[0].iLight = 250; // TODO remove when we connect a real light sensor
 
   // initialize pcf8574
   pcf857X.begin();
@@ -444,7 +452,7 @@ void loop()
   if (millis() - lreadTime > ulSensReadInterval)
   {
     debugln("Readlocal");
-    // readLight();
+    readLight();
     readAtmosphere();
     formatSensData();
     lreadTime = millis();
@@ -692,7 +700,8 @@ void sendDataToMainStation()
         jsonDocument["iVolt"] = sSensor[n].iVolt;
         iCheckSum += sSensor[n].iVolt;
       }
-      if ((sSensor[n].iLight < 500) && (sSensor[n].iLight >= 0))
+     if ((sSensor[n].iLight < 800000) && (sSensor[n].iLight >= 0)) //TODO: Remove coment when max value in sunshine is determined
+     // if ((sSensor[n].iLight >= 0))
       {
         jsonDocument["iLight"] = sSensor[n].iLight;
         iCheckSum += sSensor[n].iLight;
@@ -745,6 +754,32 @@ void readAtmosphere()
   debugln(" Pascal");
   debug("BMP Temp = ");
   debugln(bmpTemp);
+}
+
+void readLight()
+{
+  // reset
+  Wire.beginTransmission(Light_ADDR);
+  Wire.write(0b00000111);
+  Wire.endTransmission();
+
+  Wire.beginTransmission(Light_ADDR);
+  Wire.write(0b00100000);
+  Wire.endTransmission();
+  // typical read delay 120ms
+  delay(120);
+  Wire.requestFrom(Light_ADDR, 2); // 2byte every time
+  for ( sSensor[0].iLight = 0; Wire.available() >= 1;)
+  {
+    char c = Wire.read();
+     sSensor[0].iLight = ( sSensor[0].iLight << 8) + (c & 0xFF);
+  }
+   sSensor[0].iLight =  sSensor[0].iLight * 500; // * 100 skalierung 
+   sSensor[0].bSensorRec = true;
+#ifdef DEBUG
+  Serial.print("light: ");
+  Serial.println( sSensor[0].iLight);
+#endif
 }
 
 // Open WIFI AP for external sensor registration (ask for station MAC adress)
