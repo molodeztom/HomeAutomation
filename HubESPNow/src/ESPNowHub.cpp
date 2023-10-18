@@ -52,6 +52,7 @@ History:
 20231015  V1.03:  c Taktile switch order due to upside down assembly in case
 20231015  V1.04:  c Add Light Sensor again multiply by 100 
 20231015  V1.05:  c Multiply by 500 is a max around 162240 and a low around 10 
+20231016  V1.06:  c Multiply light by 100 is enough resolution. otherwise it is in steps of 5. Atmospheric pressure correction to NN 
 
 
 
@@ -86,7 +87,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.05";
+const String sSoftware = "HubESPNow V1.06";
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -112,6 +113,7 @@ const String sSoftware = "HubESPNow V1.05";
 const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
 const float fTempCorrA[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 const float fTempCorrB[nMaxSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const int iAtmoCorr = 3400; //To correct local value to NN
 
 // struct for exchanging data over ESP NOW
 
@@ -741,8 +743,8 @@ void ledOff(uint8_t LedNr)
 
 void readAtmosphere()
 {
-  sSensor[0].iAtmo = bmp.readPressure();
-  sSensor[0].iAtmo = sSensor[0].iAtmo;
+  sSensor[0].iAtmo = bmp.readPressure() + iAtmoCorr ;
+  //sSensor[0].iAtmo = sSensor[0].iAtmo; //TODO: remove seems unnecessarry
   sSensor[0].bSensorRec = true;
   sSensor[0].iTimeSinceLastRead = 0;
 #if DEBUG == 1
@@ -774,7 +776,7 @@ void readLight()
     char c = Wire.read();
      sSensor[0].iLight = ( sSensor[0].iLight << 8) + (c & 0xFF);
   }
-   sSensor[0].iLight =  sSensor[0].iLight * 500; // * 100 skalierung 
+   sSensor[0].iLight =  sSensor[0].iLight * 100; // * 100 skalierung 
    sSensor[0].bSensorRec = true;
 #ifdef DEBUG
   Serial.print("light: ");
