@@ -22,6 +22,7 @@ History:
 20230212  V0.11:  d calculate correct checksum only used values
 20230212  V0.12:  d add iAtmo to checksum only once
 20230212  V1.00:  works with 2 different sensors now 
+20231217  V1.01:  c unused sensors shall not send any mqtt message
 */
 
 #include <Arduino.h>
@@ -36,7 +37,7 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V0.12";
+const String sSoftware = "ESPWLANHub V1.01";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -266,6 +267,7 @@ void sendMQTTMessage()
 {
   char valueStr[20]; // helper to convert string to MQTT char
   char cChannelName[50];
+  char cErrorText[10];
   bool bError = false;
   debugln("sendMQTT message");
   if (!mqttClient.connected())
@@ -375,8 +377,8 @@ void sendMQTTMessage()
 
       else
       {
-
-        if (sSensor[i].iTimeSinceLastRead > iSensorTimeout)
+// if sensor was not read for a long time send mqtt error do not send anything if sensor is unused (recognized by SensorCapabilities not set)
+        if ((sSensor[i].iTimeSinceLastRead > iSensorTimeout) &&(sSensor[i].sSensorCapabilities != 0))
         {
           sprintf(cChannelName, "Sensor%i/Err", i);
           mqttClient.publish(cChannelName, "1");
