@@ -38,6 +38,10 @@
 		{
 			"name": "HubESPWLAN",
 			"path": "HubESPWLAN"
+		},
+		{
+			"name": "WLANThermoHumidLight",
+			"path": "WLANThermoHumidLight"
 		}
 	],
 	"settings": {}
