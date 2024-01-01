@@ -12,6 +12,7 @@ Used in WeatherStation and HomeServer
 20230212  V1.4  sensor capabilities
 20230212  V1.5  d do not set iLight to 0 on unused sensors
 20230212  V2.0  works with 2 different sensors now 
+20240101  V2.1  JSON declaration removed in sensors not needed TODO add to ESPHub or in a new common include file
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
@@ -97,7 +98,7 @@ struct SENSOR_DATA
 // TODO remove single variables in favor of array
 // SENSOR_DATA sSensor0, sSensor1, sSensor2, sSensor3, sSensor4, sSensor5;
 SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
-// Sensor 1: Breadboard, Sensor 2 Blau/Grau, sSensor3: Blau/Rot
+// Sensor 1: Breadboard, Sensor 2 Blau/Grau, sSensor3: Blau/Rot, sSensor6 Breadboard with light sensor
 //  Sensor reading timeout
 long lSensorValidTime = 0;
 // const unsigned long ulOneSecondTimer = 6 * 1000UL; //time in sec
@@ -113,5 +114,6 @@ const int nMaxRxArray = 256;
 /***************************
  * JSON definitions
  **************************/
-const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
-StaticJsonDocument<capacity> jsonDocument;
+//TODO this in a new HomeAutomationCommonWifi.h file not needed in sensor data
+//const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
+//StaticJsonDocument<capacity> jsonDocument;
