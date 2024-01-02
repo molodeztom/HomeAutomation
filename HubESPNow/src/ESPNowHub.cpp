@@ -50,9 +50,10 @@ History:
 20230218  V1.01:  + Menu 2 levels Test
 20230219  V1.02:  + Menu 2 sensor details and details 2
 20231015  V1.03:  c Taktile switch order due to upside down assembly in case
-20231015  V1.04:  c Add Light Sensor again multiply by 100 
-20231015  V1.05:  c Multiply by 500 is a max around 162240 and a low around 10 
-20231016  V1.06:  c Multiply light by 100 is enough resolution. otherwise it is in steps of 5. Atmospheric pressure correction to NN 
+20231015  V1.04:  c Add Light Sensor again multiply by 100
+20231015  V1.05:  c Multiply by 500 is a max around 162240 and a low around 10
+20231016  V1.06:  c Multiply light by 100 is enough resolution. otherwise it is in steps of 5. Atmospheric pressure correction to NN
+20240101  V1.07:  + sensor 6 for light, StaticJSONDocument moved from HomeAutomationCommon.h to here
 
 
 
@@ -87,7 +88,10 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.06";
+const String sSoftware = "HubESPNow V1.07";
+
+const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
+StaticJsonDocument<capacity> jsonDocument;
 
 // Now in HomeAutomationCommon.h SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 
@@ -278,7 +282,7 @@ void drawSensDetail2();
 void readLight();
 void readAtmosphere();
 Adafruit_BMP085 bmp;
-const int Light_ADDR = 0b0100011;                      // address:0x23
+const int Light_ADDR = 0b0100011; // address:0x23
 // const int Atom_ADDR = 0b1110111;                       // address:0x77
 long lreadTime = 0;
 const unsigned long ulSensReadInterval = 60 * 1000UL; // Timing Time to evaluate received sens values for display in s TIMER
@@ -381,7 +385,9 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-  //sSensor[0].iLight = 250; // TODO remove when we connect a real light sensor
+  sSensor[6].sSensorCapabilities = 0;
+  sSensor[6].sSensorCapabilities = LIGHT_ON;
+  // sSensor[0].iLight = 250; // TODO remove when we connect a real light sensor
 
   // initialize pcf8574
   pcf857X.begin();
@@ -618,7 +624,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
     }
     if (sSensor[iChannelNr].sSensorCapabilities & TEMPB_ON)
     {
-      sSensor[iChannelNr].iTempA = roundf((sESPReceive.fESPNowTempB + fTempCorrB[iChannelNr]) * 100);
+      sSensor[iChannelNr].iTempB = roundf((sESPReceive.fESPNowTempB + fTempCorrB[iChannelNr]) * 100);
       debugln("capabilities TempBOn");
     }
     if (sSensor[iChannelNr].sSensorCapabilities & HUMI_ON)
@@ -702,8 +708,8 @@ void sendDataToMainStation()
         jsonDocument["iVolt"] = sSensor[n].iVolt;
         iCheckSum += sSensor[n].iVolt;
       }
-     if ((sSensor[n].iLight < 800000) && (sSensor[n].iLight >= 0)) //TODO: Remove coment when max value in sunshine is determined
-     // if ((sSensor[n].iLight >= 0))
+      if ((sSensor[n].iLight < 800000) && (sSensor[n].iLight >= 0)) // TODO: Remove coment when max value in sunshine is determined
+      // if ((sSensor[n].iLight >= 0))
       {
         jsonDocument["iLight"] = sSensor[n].iLight;
         iCheckSum += sSensor[n].iLight;
@@ -743,8 +749,8 @@ void ledOff(uint8_t LedNr)
 
 void readAtmosphere()
 {
-  sSensor[0].iAtmo = bmp.readPressure() + iAtmoCorr ;
-  //sSensor[0].iAtmo = sSensor[0].iAtmo; //TODO: remove seems unnecessarry
+  sSensor[0].iAtmo = bmp.readPressure() + iAtmoCorr;
+  // sSensor[0].iAtmo = sSensor[0].iAtmo; //TODO: remove seems unnecessarry
   sSensor[0].bSensorRec = true;
   sSensor[0].iTimeSinceLastRead = 0;
 #if DEBUG == 1
@@ -771,16 +777,16 @@ void readLight()
   // typical read delay 120ms
   delay(120);
   Wire.requestFrom(Light_ADDR, 2); // 2byte every time
-  for ( sSensor[0].iLight = 0; Wire.available() >= 1;)
+  for (sSensor[0].iLight = 0; Wire.available() >= 1;)
   {
     char c = Wire.read();
-     sSensor[0].iLight = ( sSensor[0].iLight << 8) + (c & 0xFF);
+    sSensor[0].iLight = (sSensor[0].iLight << 8) + (c & 0xFF);
   }
-   sSensor[0].iLight =  sSensor[0].iLight * 100; // * 100 skalierung 
-   sSensor[0].bSensorRec = true;
+  sSensor[0].iLight = sSensor[0].iLight * 100; // * 100 skalierung
+  sSensor[0].bSensorRec = true;
 #ifdef DEBUG
   Serial.print("light: ");
-  Serial.println( sSensor[0].iLight);
+  Serial.println(sSensor[0].iLight);
 #endif
 }
 
@@ -842,7 +848,7 @@ void formatSensData()
     {
       // sensor found write a formatted string into display array
       // precision is controlled by the division 100 means 2 decimals 10 means 1 decimal
- 
+
       sprintf(textSensTemp[n], "%2.i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
       sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
       sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
