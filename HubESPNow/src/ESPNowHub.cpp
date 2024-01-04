@@ -54,6 +54,10 @@ History:
 20231015  V1.05:  c Multiply by 500 is a max around 162240 and a low around 10
 20231016  V1.06:  c Multiply light by 100 is enough resolution. otherwise it is in steps of 5. Atmospheric pressure correction to NN
 20240101  V1.07:  + sensor 6 for light, StaticJSONDocument moved from HomeAutomationCommon.h to here
+20240102  V1.08:  c compiled with HomeAutomationCommon.h V2.2 including data struct for light values
+20240102  V1.09:  c evaluate light values show on display
+20241002  V1.10:  c debug values
+20240104  V1.20:  c debug removed now shows lux in display and version
 
 
 
@@ -88,7 +92,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.07";
+const String sSoftware = "HubESPNow V1.10";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -117,7 +121,7 @@ StaticJsonDocument<capacity> jsonDocument;
 const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
 const float fTempCorrA[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 const float fTempCorrB[nMaxSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-const int iAtmoCorr = 3400; //To correct local value to NN
+const int iAtmoCorr = 3400; // To correct local value to NN
 
 // struct for exchanging data over ESP NOW
 
@@ -139,7 +143,8 @@ SoftwareSerial swSer(D9, D7, false);
 char textSensTemp[nMaxSensors][22];
 char textSensHumi[nMaxSensors][22];
 char textSensAtmo[nMaxSensors][22];
-char textSensLight[nMaxSensors][22];
+char textSensLight[nMaxSensors][22]; // TODO not needed remove
+char textSensLux[nMaxSensors][22];
 
 String sNewSensorChannel;
 String sNewSensorMAC;
@@ -225,7 +230,7 @@ PCF8574 pcf857X(iPCF857XAdr);
 #define SW3 P1
 #define SW4 P0
 */
-#define SW1 P0 //TODO: remove tmp until red switch or label changed
+#define SW1 P0 // TODO: remove tmp until red switch or label changed
 #define SW2 P1
 #define SW3 P2
 #define SW4 P3
@@ -262,6 +267,7 @@ void drawSens0();
 void drawSens1();
 void drawSens2();
 void drawSens5();
+void drawSens6();
 void formatSensData();
 void startOTA();
 void formatNewSensorData();
@@ -615,6 +621,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
   {
 
     // recieve sensor values instantly convert to int
+    sSensor[iChannelNr].nVersion = sESPReceive.nVersion;
 
     if (sSensor[iChannelNr].sSensorCapabilities & TEMPA_ON)
     {
@@ -638,6 +645,29 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
       sSensor[iChannelNr].iVolt = roundf((sESPReceive.fESPNowVolt + fBattCorr[iChannelNr]) * 100);
       debug("Batt V: ");
       debugln(sSensor[iChannelNr].iVolt);
+    }
+
+    if ((sSensor[iChannelNr]).nVersion == 1)
+    {
+      // sensor interface version 2 with light values TODO make dependend on sensor capabilities
+      sSensor[iChannelNr].nLux = sESPReceive.nLux;
+      debug("Lux: ");
+      debugln(sSensor[iChannelNr].nLux);
+      sSensor[iChannelNr].nRed = sESPReceive.nRed;
+      debug("Red: ");
+      debugln(sSensor[iChannelNr].nRed);
+      sSensor[iChannelNr].nGreen = sESPReceive.nGreen;
+      debug("Green: ");
+      debugln(sSensor[iChannelNr].nGreen);
+      sSensor[iChannelNr].nBlue = sESPReceive.nBlue;
+      debug("Blue: ");
+      debugln(sSensor[iChannelNr].nBlue);
+      sSensor[iChannelNr].nColorTemp = sESPReceive.nColorTemp;
+      debug("ColorTemp: ");
+      debugln(sSensor[iChannelNr].nColorTemp);
+      sSensor[iChannelNr].nClear = sESPReceive.nClear;
+      debug("Clear: ");
+      debugln(sSensor[iChannelNr].nClear);
     }
 
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -719,6 +749,12 @@ void sendDataToMainStation()
         jsonDocument["iAtmo"] = sSensor[n].iAtmo;
         iCheckSum += sSensor[n].iAtmo;
       }
+      if ((sSensor[n].nLux != InvalidMeasurement))
+      {
+        jsonDocument["nLux"] = sSensor[n].nLux;
+        iCheckSum += sSensor[n].nLux;
+      }
+
       jsonDocument["iCSum"] = iCheckSum;
 
       sSensor[n].bSensorRec = false;
@@ -852,6 +888,7 @@ void formatSensData()
       sprintf(textSensTemp[n], "%2.i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
       sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
       sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
+      sprintf(textSensLux[n], "%i Lux", (sSensor[n].nLux));
 
       debug("TempA: ");
       debugln(textSensTemp[n]);
@@ -907,14 +944,29 @@ void drawSens5()
   display.drawString(61, 54, "Arbeitszimmer");
 }
 
+void drawSens6()
+{
+
+  display.setFont(ArialMT_Plain_24);
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(25, 2, textSensLux[6]);
+  // display.drawString(25, 28, textSensHumi[6]);
+  display.setFont(ArialMT_Plain_10);
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.drawString(61, 54, "Breadboard");
+}
+
 void drawSensDetail()
 {
   String sSensorMAC;
   String sSensorChannel;
+  String sSensorVersion;
   char textLastRead[20];
 
   sSensorChannel = String(sSensor[iCurSensorDisplay].iSensorChannel);
   sSensorMAC = (sSensor[iCurSensorDisplay].sMacAddress);
+  sSensorVersion = String(sSensor[iCurSensorDisplay].nVersion);
+
   // format last time read into min:sec
   // TODO clean
   // int sec = (sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60;
@@ -936,8 +988,11 @@ void drawSensDetail()
     display.drawString(35, 12, sSensorMAC);
   }
 
-  display.drawString(5, 22, "Letzter Empfang: ");
-  display.drawString(85, 22, textLastRead);
+  display.drawString(5, 22, "Version: ");
+  display.drawString(85, 22, sSensorVersion);
+
+  display.drawString(5, 32, "Letzter Empfang: ");
+  display.drawString(85, 32, textLastRead);
 
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.drawString(54, 54, "Sensor Details 1");
@@ -1048,8 +1103,10 @@ void updateDisplay()
       case 5:
         drawSens5();
         break;
+      case 6:
+        drawSens6();
+        break;
       default:
-        drawSens5();
         break;
       }
     }

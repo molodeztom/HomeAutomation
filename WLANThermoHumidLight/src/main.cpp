@@ -11,6 +11,7 @@ Home Automation Project
   20231231  V0.1: Blink Test
   20240101  V0.2: Sensor auslesen und Serial Output
   20240101  V0.3: ESPNow Send aus WLANThermoHumidExt hinzu neu auch HomeAutomationCommon.h verwendet
+  20240102  V0.4: send all light sensor values over espnow
 
 
 */
@@ -45,7 +46,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "ThermoHumiLightSens V0.3";
+const String sSoftware = "ThermoHumiLightSens V0.4";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -93,6 +94,8 @@ volatile bool callbackCalled;
 
 MEMORYDATA statinfo;
 
+uint16_t nRed, nGreen, nBlue, nClear, nColorTemp, nLux; // sensor values
+
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
 //  use Pin Numbers from GPIO e.g. GPIO4 = 4
@@ -112,10 +115,12 @@ MEMORYDATA statinfo;
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_614MS, TCS34725_GAIN_1X);
 
 // forward declarations
-// Forward declarations
+
 uint32_t calculateCRC32(const uint8_t *data, size_t length);
 void UpdateRtcMemory();
 void ScanForSlave();
+void MeasureLightValues();
+void SendValuesESPNow();
 
 void setup()
 {
@@ -145,14 +150,14 @@ void setup()
   // digitalWrite(LEDON, HIGH); //switch on white LED
 
   //------------------------------------------------------------------------------------------WIFI begin
-  // Wir lesen aus dem RTC Memory
+  // read target mac adress from rtc
   ESP.rtcUserMemoryRead(0, (uint32_t *)&statinfo, sizeof(statinfo));
 
   uint32_t crcOfData = calculateCRC32(((uint8_t *)&statinfo) + 4, sizeof(statinfo) - 4);
   WiFi.mode(WIFI_STA); // Station mode for esp-now sensor node
 
   if (statinfo.crc32 != crcOfData)
-  { // wir haben keine gültige MAC Adresse
+  { // mac adress not valid
 
     Serial.println("Scan vor Slave");
     ScanForSlave();
@@ -169,9 +174,9 @@ void setup()
   }
   // ESP Now Controller
   esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
-  // Peer Daten initialisieren
+  // initialize peer data
   esp_now_add_peer(statinfo.mac, ESP_NOW_ROLE_SLAVE, WIFI_CHANNEL, NULL, 0);
-  // wir registrieren die Funktion, die nach dem Senden aufgerufen werden soll
+  // register send callback
   esp_now_register_send_cb([](uint8_t *mac, uint8_t sendStatus)
                            {
 #ifdef DEBUG
@@ -183,20 +188,10 @@ void setup()
     Serial.println(macString);
 #endif
     callbackCalled = true; });
-  // Flag auf false setzen
+  // remember callback already called
   callbackCalled = false;
   //------------------------------------------------------------------------------------------WIFI end
-  ESPNOW_DATA_STRUCTURE data;
-  data.fESPNowTempA = 99;
-
-  // Batterie messen
-  // data.fVoltage = fVoltage;
-
-  uint8_t bs[sizeof(data)];
-  // Datenstruktur in den Sendebuffer kopieren
-  memcpy(bs, &data, sizeof(data));
-  // Daten an Thermometer senden
-  esp_now_send(NULL, bs, sizeof(data)); // NULL means send to all peers
+  
 }
 
 void loop()
@@ -206,34 +201,80 @@ void loop()
 
   delay(100);                     // wait for a second
   digitalWrite(LED_BUILTIN, LOW); // turn the LED off by making the voltage LOW
-  uint16_t r, g, b, c, colorTemp, lux;
+  MeasureLightValues();
+  SendValuesESPNow();
 
-  tcs.getRawData(&r, &g, &b, &c);
-  colorTemp = tcs.calculateColorTemperature(r, g, b);
-  colorTemp = tcs.calculateColorTemperature_dn40(r, g, b, c);
-  lux = tcs.calculateLux(r, g, b);
+  delay(20000); // wait for a second
+}
+
+// read sensor values and calculate
+void MeasureLightValues()
+{
+  tcs.getRawData(&nRed, &nGreen, &nBlue, &nClear);
+  // nColorTemp = tcs.calculateColorTemperature(nRed, nGreen, nBlue);
+  nColorTemp = tcs.calculateColorTemperature_dn40(nRed, nGreen, nBlue, nClear);
+  nLux = tcs.calculateLux(nRed, nGreen, nBlue);
 
   Serial.print("Color Temp: ");
-  Serial.print(colorTemp, DEC);
+  Serial.print(nColorTemp, DEC);
   Serial.print(" K - ");
   Serial.print("Lux: ");
-  Serial.print(lux, DEC);
+  Serial.print(nLux, DEC);
   Serial.print(" - ");
   Serial.print("R: ");
-  Serial.print(r, DEC);
+  Serial.print(nRed, DEC);
   Serial.print(" ");
   Serial.print("G: ");
-  Serial.print(g, DEC);
+  Serial.print(nGreen, DEC);
   Serial.print(" ");
   Serial.print("B: ");
-  Serial.print(b, DEC);
+  Serial.print(nBlue, DEC);
   Serial.print(" ");
   Serial.print("C: ");
-  Serial.print(c, DEC);
+  Serial.print(nClear, DEC);
   Serial.print(" ");
   Serial.println(" ");
+}
 
-  delay(500); // wait for a second
+void SendValuesESPNow()
+{
+  ESPNOW_DATA_STRUCTURE data;
+
+  // fill data structure with values on real sensor this is done in setup routing after sensor wakeup
+  // on breadboard test this is done in a timed loop
+  /* struct ESPNOW_DATA_STRUCTURE
+  {
+    int iSensorChannel = 99;  // default for none received
+    float fESPNowTempA = -99; // Aussen A
+    float fESPNowTempB = -99; // Aussen B
+    float fESPNowHumi = -99;
+    float fESPNowVolt = -99; // Batterie Sensor
+    int nVersion = 1; //interface Version 0 w/o version only TempA to Volt, V1: including Light
+    int nColorTemp = -99;
+    int nLux = -99;
+    int nRed = -99;
+    int nGreen = -99;
+    int nBlue = -99;
+    int nClear = -99;
+  }; */
+
+  data.nVersion = 1; // V1: including Light
+  data.iSensorChannel = 6;
+  // check battery voltage TODO activate on real pcb
+  // data.fVoltage = fVoltage;
+  data.nColorTemp = nColorTemp;
+  data.nLux = nLux;
+  data.nRed = nRed;
+  data.nGreen = nGreen;
+  data.nBlue = nBlue;
+  data.nClear = nClear;
+
+  uint8_t bs[sizeof(data)];
+  // Datenstruktur in den Sendebuffer kopieren
+  memcpy(bs, &data, sizeof(data));
+  // Daten an Thermometer senden
+  esp_now_send(NULL, bs, sizeof(data)); // NULL means send to all peers
+
 }
 
 // Unterprogramm zum Berechnen der Prüfsumme
@@ -322,7 +363,7 @@ void ScanForSlave()
 #endif
         int mac[6];
         // wir ermitteln die MAC Adresse und speichern sie im RTC Memory
- if (6 == sscanf(BSSIDstr.c_str(), "%x:%x:%x:%x:%x:%x%c", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]))
+        if (6 == sscanf(BSSIDstr.c_str(), "%x:%x:%x:%x:%x:%x%c", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]))
         {
           for (int ii = 0; ii < 6; ++ii)
           {
