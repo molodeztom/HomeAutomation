@@ -21,8 +21,9 @@ History:
 20230212  V0.10:  c recieve sensor capabilities over serial use loop for mqtt send
 20230212  V0.11:  d calculate correct checksum only used values
 20230212  V0.12:  d add iAtmo to checksum only once
-20230212  V1.00:  works with 2 different sensors now 
+20230212  V1.00:  works with 2 different sensors now
 20231217  V1.01:  c unused sensors shall not send any mqtt message
+20240105  V1.02:  + receive light sensor values and send by mqtt
 */
 
 #include <Arduino.h>
@@ -37,7 +38,10 @@ History:
 
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "ESPWLANHub V1.01";
+const String sSoftware = "ESPWLANHub V1.02";
+const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
+StaticJsonDocument<capacity> jsonDocument;
+
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -204,7 +208,7 @@ void readJSONMessage()
     // get single values from JSON to local values if not found set default value to recognize the problem
     // common values for all sensors even if a measurement is not supported
     iSensor = jsonDocument["sensor"] | InvalidMeasurement;
-    if (iSensor < 0 || iSensor > 5)
+    if (iSensor < 0 || iSensor > 6)
     {
       debugln("sensor number out of range");
       bError = true; // abort
@@ -228,6 +232,12 @@ void readJSONMessage()
     sSensor[iSensor].iVolt = jsonDocument["iVolt"] | InvalidMeasurement;
     sSensor[iSensor].iLight = jsonDocument["iLight"] | InvalidMeasurement;
     sSensor[iSensor].iAtmo = jsonDocument["iAtmo"] | InvalidMeasurement;
+    sSensor[iSensor].nLux = jsonDocument["nLux"] | InvalidMeasurement;
+    sSensor[iSensor].nRed = jsonDocument["nRed"] | InvalidMeasurement;
+    sSensor[iSensor].nGreen = jsonDocument["nGreen"] | InvalidMeasurement;
+    sSensor[iSensor].nBlue = jsonDocument["nBlue"] | InvalidMeasurement;
+    sSensor[iSensor].nClear = jsonDocument["nClear"] | InvalidMeasurement;
+    sSensor[iSensor].nColorTemp = jsonDocument["nColor"] | InvalidMeasurement;
     iCheckSumRec = jsonDocument["iCSum"] | InvalidMeasurement;
     iCheckSumLocal = sSensor[iSensor].sSensorCapabilities;
     // use only values we really received for checksum calculation
@@ -243,6 +253,18 @@ void readJSONMessage()
       iCheckSumLocal += sSensor[iSensor].iLight;
     if (sSensor[iSensor].iAtmo != InvalidMeasurement)
       iCheckSumLocal += sSensor[iSensor].iAtmo;
+    if (sSensor[iSensor].nLux != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nLux;
+    if (sSensor[iSensor].nRed != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nRed;
+    if (sSensor[iSensor].nGreen != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nGreen;
+    if (sSensor[iSensor].nBlue != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nBlue;
+    if (sSensor[iSensor].nClear != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nClear;
+    if (sSensor[iSensor].nColorTemp != InvalidMeasurement)
+      iCheckSumLocal += sSensor[iSensor].nColorTemp;
 
     if ((iCheckSumRec == InvalidMeasurement) || (iCheckSumRec != iCheckSumLocal))
     {
@@ -347,6 +369,45 @@ void sendMQTTMessage()
           debug(cChannelName);
           debug(" ");
           debugln(valueStr);
+          // TODO use different capabilities for light and RGB light
+          sprintf(cChannelName, "Sensor%i/nLux", i);
+          dtostrf(float(sSensor[i].nLux), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
+
+          sprintf(cChannelName, "Sensor%i/nRed", i);
+          dtostrf(float(sSensor[i].nRed), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
+          sprintf(cChannelName, "Sensor%i/nGreen", i);
+          dtostrf(float(sSensor[i].nGreen), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
+          sprintf(cChannelName, "Sensor%i/nBlue", i);
+          dtostrf(float(sSensor[i].nBlue), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
+          sprintf(cChannelName, "Sensor%i/nClear", i);
+          dtostrf(float(sSensor[i].nClear), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
+          sprintf(cChannelName, "Sensor%i/nColor", i);
+          dtostrf(float(sSensor[i].nColorTemp), 4, 0, valueStr);
+          mqttClient.publish(cChannelName, valueStr);
+          debug(cChannelName);
+          debug(" ");
+          debugln(valueStr);
         }
         if (sSensorCapabilities & ATMO_ON)
         {
@@ -377,8 +438,8 @@ void sendMQTTMessage()
 
       else
       {
-// if sensor was not read for a long time send mqtt error do not send anything if sensor is unused (recognized by SensorCapabilities not set)
-        if ((sSensor[i].iTimeSinceLastRead > iSensorTimeout) &&(sSensor[i].sSensorCapabilities != 0))
+        // if sensor was not read for a long time send mqtt error do not send anything if sensor is unused (recognized by SensorCapabilities not set)
+        if ((sSensor[i].iTimeSinceLastRead > iSensorTimeout) && (sSensor[i].sSensorCapabilities != 0))
         {
           sprintf(cChannelName, "Sensor%i/Err", i);
           mqttClient.publish(cChannelName, "1");
