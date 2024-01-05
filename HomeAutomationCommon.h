@@ -81,7 +81,7 @@ const uint16_t VOLT_ON = 1 << 2;  // 4 (0x4);
 const uint16_t HUMI_ON = 1 << 3;  // 8 (0x8)
 const uint16_t LIGHT_ON = 1 << 4; // 16 (0x10)
 const uint16_t ATMO_ON = 1 << 5;  // 32 (0x20)
-const uint16_t OPT1_ON = 1 << 6;  // 64 (0x40)
+const uint16_t RGB_ON = 1 << 6;  // 64 (0x40)
 const uint16_t OPT2_ON = 1 << 7;  // 128 (0x80)
 const uint16_t OPT3_ON = 1 << 8;  // 256 (0x100)
 // used for local storage in ESPNowHub
@@ -110,8 +110,6 @@ struct SENSOR_DATA
   bool bSensorRegistered = false; // true when sensor is first time received
   int iTimeSinceLastRead;         // Minutes count up between sensor readings 0 if a new reading comes in, used for sensor data recieved over ESPNow
 };
-// TODO remove single variables in favor of array
-// SENSOR_DATA sSensor0, sSensor1, sSensor2, sSensor3, sSensor4, sSensor5;
 SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
 // Sensor 1: Breadboard, Sensor 2 Blau/Grau, sSensor3: Blau/Rot, sSensor6 Breadboard with light sensor
 //  Sensor reading timeout
@@ -129,6 +127,6 @@ const int nMaxRxArray = 256;
 /***************************
  * JSON definitions
  **************************/
-//TODO this in a new HomeAutomationCommonWifi.h file not needed in sensor data
+//this in now in each file wher JSON is needed
 //const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 //StaticJsonDocument<capacity> jsonDocument;

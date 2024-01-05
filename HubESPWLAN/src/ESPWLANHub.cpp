@@ -160,11 +160,7 @@ void loop()
     {
       bLedState = LOW;
     }
-
     digitalWrite(LED_BUILTIN, bLedState);
-    // debugln("1 Second");
-    //  TODO Sensor 4 was not incremented in original code
-    //   will be true if after a while none of the sensors gets data. Then we need to send ERR MQTT Message
 
     lSecondsTime = millis();
   }
@@ -289,7 +285,6 @@ void sendMQTTMessage()
 {
   char valueStr[20]; // helper to convert string to MQTT char
   char cChannelName[50];
-  char cErrorText[10];
   bool bError = false;
   debugln("sendMQTT message");
   if (!mqttClient.connected())
@@ -369,7 +364,10 @@ void sendMQTTMessage()
           debug(cChannelName);
           debug(" ");
           debugln(valueStr);
-          // TODO use different capabilities for light and RGB light
+        }
+        
+        if (sSensorCapabilities & RGB_ON)
+        {
           sprintf(cChannelName, "Sensor%i/nLux", i);
           dtostrf(float(sSensor[i].nLux), 4, 0, valueStr);
           mqttClient.publish(cChannelName, valueStr);
@@ -409,6 +407,7 @@ void sendMQTTMessage()
           debug(" ");
           debugln(valueStr);
         }
+
         if (sSensorCapabilities & ATMO_ON)
         {
           sprintf(cChannelName, "Sensor%i/iAtmo", i);
@@ -418,9 +417,9 @@ void sendMQTTMessage()
           debug(" ");
           debugln(valueStr);
         }
-        if (sSensorCapabilities & OPT1_ON)
+        if (sSensorCapabilities & RGB_ON)
         {
-          debugln("OPT1_ON");
+          debugln("RGB_ON");
         }
 
         if (sSensorCapabilities & OPT2_ON)

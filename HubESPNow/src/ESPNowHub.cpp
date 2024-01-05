@@ -58,8 +58,7 @@ History:
 20240102  V1.09:  c evaluate light values show on display
 20241002  V1.10:  c debug values
 20240104  V1.11:  c debug removed now shows lux, red, green... in display and version
-
-
+20230104  V1.12:  c Todos solved, new sensor capability RGB
 
 
  */
@@ -71,8 +70,7 @@ History:
 #include <SoftwareSerial.h>
 #include "PCF8574.h"
 #include "SSD1306Wire.h"
-// Include the UI lib TODO try the ui LIB
-// #include "OLEDDisplayUi.h"
+
 #include "images.h"
 #include <ArduinoOTA.h>
 
@@ -92,7 +90,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.11";
+const String sSoftware = "HubESPNow V1.12";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -143,11 +141,8 @@ SoftwareSerial swSer(D9, D7, false);
 char textSensTemp[nMaxSensors][22];
 char textSensHumi[nMaxSensors][22];
 char textSensAtmo[nMaxSensors][22];
-char textSensLight[nMaxSensors][22]; // TODO not needed remove
 char textSensLux[nMaxSensors][22];
-char textSensRed[nMaxSensors][22];
-char textSensGreen[nMaxSensors][22];
-char textSensBlue[nMaxSensors][22];
+char textSensRGB[nMaxSensors][22];
 char textSensClear[nMaxSensors][22];
 char textSensColorTemp[nMaxSensors][22];
 
@@ -306,7 +301,6 @@ void setup()
   swSer.begin(swBAUD_RATE); // SW port for serial communication
   Serial.println(sSoftware);
   pinMode(LED_BUILTIN, OUTPUT);
-
   digitalWrite(LED_BUILTIN, LOW);
   ProgramMode = normal;
   // WIFI ESPNOW
@@ -397,8 +391,7 @@ void setup()
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
   sSensor[6].sSensorCapabilities = 0;
-  sSensor[6].sSensorCapabilities = LIGHT_ON;
-  // sSensor[0].iLight = 250; // TODO remove when we connect a real light sensor
+  sSensor[6].sSensorCapabilities = RGB_ON;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -609,7 +602,10 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 
   ESPNOW_DATA_STRUCTURE sESPReceive;
   int iChannelNr;
+#if DEBUG == 1
   int iLastSSinceLastRead;
+#endif
+
   // copy received data to struct, to get access via variables
   digitalWrite(LED_BUILTIN, LOW);
   memcpy(&sESPReceive, r_data, sizeof(sESPReceive));
@@ -654,25 +650,28 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 
     if ((sSensor[iChannelNr]).nVersion == 1)
     {
-      // sensor interface version 2 with light values TODO make dependend on sensor capabilities
-      sSensor[iChannelNr].nLux = sESPReceive.nLux;
-      debug("Lux: ");
-      debugln(sSensor[iChannelNr].nLux);
-      sSensor[iChannelNr].nRed = sESPReceive.nRed;
-      debug("Red: ");
-      debugln(sSensor[iChannelNr].nRed);
-      sSensor[iChannelNr].nGreen = sESPReceive.nGreen;
-      debug("Green: ");
-      debugln(sSensor[iChannelNr].nGreen);
-      sSensor[iChannelNr].nBlue = sESPReceive.nBlue;
-      debug("Blue: ");
-      debugln(sSensor[iChannelNr].nBlue);
-      sSensor[iChannelNr].nColorTemp = sESPReceive.nColorTemp;
-      debug("ColorTemp: ");
-      debugln(sSensor[iChannelNr].nColorTemp);
-      sSensor[iChannelNr].nClear = sESPReceive.nClear;
-      debug("Clear: ");
-      debugln(sSensor[iChannelNr].nClear);
+      // sensor interface version 2 with RGB values
+      if (sSensor[iChannelNr].sSensorCapabilities & RGB_ON)
+      {
+        sSensor[iChannelNr].nLux = sESPReceive.nLux;
+        debug("Lux: ");
+        debugln(sSensor[iChannelNr].nLux);
+        sSensor[iChannelNr].nRed = sESPReceive.nRed;
+        debug("Red: ");
+        debugln(sSensor[iChannelNr].nRed);
+        sSensor[iChannelNr].nGreen = sESPReceive.nGreen;
+        debug("Green: ");
+        debugln(sSensor[iChannelNr].nGreen);
+        sSensor[iChannelNr].nBlue = sESPReceive.nBlue;
+        debug("Blue: ");
+        debugln(sSensor[iChannelNr].nBlue);
+        sSensor[iChannelNr].nColorTemp = sESPReceive.nColorTemp;
+        debug("ColorTemp: ");
+        debugln(sSensor[iChannelNr].nColorTemp);
+        sSensor[iChannelNr].nClear = sESPReceive.nClear;
+        debug("Clear: ");
+        debugln(sSensor[iChannelNr].nClear);
+      }
     }
 
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -693,7 +692,7 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
       formatNewSensorData();
     }
   }
-};
+}
 
 void sendDataToMainStation()
 {
@@ -743,8 +742,8 @@ void sendDataToMainStation()
         jsonDocument["iVolt"] = sSensor[n].iVolt;
         iCheckSum += sSensor[n].iVolt;
       }
-      if ((sSensor[n].iLight < 800000) && (sSensor[n].iLight >= 0)) // TODO: Remove coment when max value in sunshine is determined
-      // if ((sSensor[n].iLight >= 0))
+      if ((sSensor[n].iLight < 800000) && (sSensor[n].iLight >= 0))
+
       {
         jsonDocument["iLight"] = sSensor[n].iLight;
         iCheckSum += sSensor[n].iLight;
@@ -817,7 +816,7 @@ void ledOff(uint8_t LedNr)
 void readAtmosphere()
 {
   sSensor[0].iAtmo = bmp.readPressure() + iAtmoCorr;
-  // sSensor[0].iAtmo = sSensor[0].iAtmo; //TODO: remove seems unnecessarry
+
   sSensor[0].bSensorRec = true;
   sSensor[0].iTimeSinceLastRead = 0;
 #if DEBUG == 1
@@ -919,24 +918,27 @@ void formatSensData()
       sprintf(textSensTemp[n], "%2.i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
       sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
       sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
-      // only new sensor version TODO replace by sensor capabilities
+
       if (sSensor[n].nVersion == 1)
       {
-        sprintf(textSensLux[n], "%i Lux", (sSensor[n].nLux));
-        sprintf(textSensRed[n], "%i %i %i RGB", (sSensor[n].nRed), (sSensor[n].nGreen), (sSensor[n].nBlue));
-        //  sprintf(textSensGreen[n], "%i Green", (sSensor[n].nGreen));
-        // sprintf(textSensBlue[n], "%i Blue", (sSensor[n].nBlue));
-        sprintf(textSensClear[n], "%i Clear", (sSensor[n].nClear));
-        sprintf(textSensColorTemp[n], "%i Color", (sSensor[n].nColorTemp));
+        // sensor interface version 1 with RGB values
+        if (sSensor[n].sSensorCapabilities & RGB_ON)
+        {
+          sprintf(textSensLux[n], "%i Lux", (sSensor[n].nLux));
+          sprintf(textSensRGB[n], "%i %i %i RGB", (sSensor[n].nRed), (sSensor[n].nGreen), (sSensor[n].nBlue));
+          sprintf(textSensClear[n], "%i Clear", (sSensor[n].nClear));
+          sprintf(textSensColorTemp[n], "%i Color", (sSensor[n].nColorTemp));
+        }
       }
-
-      debug("TempA: ");
-      debugln(textSensTemp[n]);
-      debug("Humi: ");
-      debugln(textSensHumi[n]);
-      debug("Atmo: ");
-      debugln(textSensAtmo[n]);
     }
+#if DEBUG == 1
+    debug("TempA: ");
+    debugln(textSensTemp[n]);
+    debug("Humi: ");
+    debugln(textSensHumi[n]);
+    debug("Atmo: ");
+    debugln(textSensAtmo[n]);
+#endif
   }
 }
 // TODO make this generic according to sensor capabilities and sensor name from array
@@ -990,9 +992,7 @@ void drawSens6()
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.drawString(5, 2, textSensLux[6]);
-  display.drawString(5, 18, textSensRed[6]);
-  // display.drawString(20, 2, textSensGreen[6]);
-  // display.drawString(25, 2, textSensBlue[6]);
+  display.drawString(5, 18, textSensRGB[6]);
   display.drawString(5, 28, textSensClear[6]);
   display.drawString(5, 40, textSensColorTemp[6]);
 
@@ -1013,10 +1013,7 @@ void drawSensDetail()
   sSensorVersion = String(sSensor[iCurSensorDisplay].nVersion);
 
   // format last time read into min:sec
-  // TODO clean
-  // int sec = (sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60;
-  // sprintf(textLastRead, "%i.%i ", (((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), (int)((sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60)));
-  // sprintf(textLastRead, " %i:%.2u", ((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), sec);
+
   sprintf(textLastRead, " %i:%.2u", ((sSensor[iCurSensorDisplay].iTimeSinceLastRead) / 60), (sSensor[iCurSensorDisplay].iTimeSinceLastRead) % 60);
 
   display.setFont(ArialMT_Plain_10);
@@ -1048,10 +1045,12 @@ void drawSensDetail2()
   char cTextSensorVolt[20];
   char textCapabilities[50];
   char textCapabilities1[50];
+  char textCapabilities2[50];
   uint16_t iSensCap = sSensor[iCurSensorDisplay].sSensorCapabilities;
   // convert bit mask into text
   sprintf(textCapabilities, "TempA: %s Humi: %s Volt: %s ", (iSensCap & TEMPA_ON) ? "1" : "0", (iSensCap & HUMI_ON) ? "1" : "0", (iSensCap & VOLT_ON) ? "1" : "0");
-  sprintf(textCapabilities1, "Atmo: %s TempB: %s Light: %s ", (iSensCap & ATMO_ON) ? "1" : "0", (iSensCap & TEMPB_ON) ? "1" : "0", (iSensCap & LIGHT_ON) ? "1" : "0");
+  sprintf(textCapabilities1, "Atmo: %s TempB: %s RGB: %s ", (iSensCap & ATMO_ON) ? "1" : "0", (iSensCap & TEMPB_ON) ? "1" : "0", (iSensCap & LIGHT_ON) ? "1" : "0");
+  sprintf(textCapabilities2, "RGB: %s Opt2: %s Opt3: %s ", (iSensCap & RGB_ON) ? "1" : "0", (iSensCap & OPT2_ON) ? "1" : "0", (iSensCap & OPT3_ON) ? "1" : "0");
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);
 
@@ -1067,8 +1066,9 @@ void drawSensDetail2()
   }
 
   display.drawString(5, 12, "Sensor Werte: ");
-  display.drawString(5, 23, textCapabilities);
-  display.drawString(5, 33, textCapabilities1);
+  display.drawString(5, 22, textCapabilities);
+  display.drawString(5, 32, textCapabilities1);
+  display.drawString(5, 42, textCapabilities2);
 
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.drawString(54, 54, "Sensor Details 2");

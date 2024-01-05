@@ -12,6 +12,7 @@ Home Automation Project
   20240101  V0.2: Sensor auslesen und Serial Output
   20240101  V0.3: ESPNow Send aus WLANThermoHumidExt hinzu neu auch HomeAutomationCommon.h verwendet
   20240102  V0.4: send all light sensor values over espnow
+  20230105  V1.0: cleanup
 
 
 */
@@ -46,7 +47,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "ThermoHumiLightSens V0.4";
+const String sSoftware = "ThermoHumiLightSens V1.0";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -70,16 +71,6 @@ const String sSoftware = "ThermoHumiLightSens V0.4";
 #define CHAN 6            // sensor channel 1 = Developmentboard 2 = ESP gelötet
 #define SLEEP_TIME 90E6   // Zeit in  uS z.B. 5 Minuten entspricht 300E6 normal 90
 
-// Datenstruktur für den Datenaustausch
-// TODO: change to ESPNOW_DATA_STRUCTURE from HomeAutomationCommon.h
-/* struct DATEN_STRUKTUR
-{
-  int chan = CHAN;
-  float temp1 = -127; //Aussen A
-  float temp2 = -127; //Aussen B
-  float fHumidity = -1;
-  float fVoltage = -1; //Batterie Sensor
-}; */
 
 // Datenstruktur für das Rtc Memory mit Prüfsumme um die Gültigkeit
 // zu überprüfen damit wird die MAC Adresse gespeichert
@@ -240,24 +231,6 @@ void SendValuesESPNow()
 {
   ESPNOW_DATA_STRUCTURE data;
 
-  // fill data structure with values on real sensor this is done in setup routing after sensor wakeup
-  // on breadboard test this is done in a timed loop
-  /* struct ESPNOW_DATA_STRUCTURE
-  {
-    int iSensorChannel = 99;  // default for none received
-    float fESPNowTempA = -99; // Aussen A
-    float fESPNowTempB = -99; // Aussen B
-    float fESPNowHumi = -99;
-    float fESPNowVolt = -99; // Batterie Sensor
-    int nVersion = 1; //interface Version 0 w/o version only TempA to Volt, V1: including Light
-    int nColorTemp = -99;
-    int nLux = -99;
-    int nRed = -99;
-    int nGreen = -99;
-    int nBlue = -99;
-    int nClear = -99;
-  }; */
-
   data.nVersion = 1; // V1: including Light
   data.iSensorChannel = 6;
   // check battery voltage TODO activate on real pcb
@@ -268,6 +241,7 @@ void SendValuesESPNow()
   data.nGreen = nGreen;
   data.nBlue = nBlue;
   data.nClear = nClear;
+  
 
   uint8_t bs[sizeof(data)];
   // Datenstruktur in den Sendebuffer kopieren
