@@ -14,6 +14,7 @@ Used in WeatherStation and HomeServer
 20230212  V2.0  works with 2 different sensors now 
 20240101  V2.1  JSON declaration removed in sensors not needed TODO add to ESPHub or in a new common include file
 20240102  V2.2  Add light sensor values to ESP NOW Data Structure
+20240106  V2.3  Sensor capabilities in ESPNOW struct receive when sensor version > 1
 
 */
 // DELETE THIS INCLUDE YOU DO NOT NEED THIS FILE WHEN USING THE PASSWORDS BELOW
@@ -65,6 +66,7 @@ struct ESPNOW_DATA_STRUCTURE
   float fESPNowHumi = -99;
   float fESPNowVolt = -99; // Batterie Sensor
   int nVersion = 1; //interface Version 0 w/o version only TempA to Volt, V1: including Light
+  uint16_t sSensorCapabilities = 0;
   int nColorTemp = -99;
   int nLux = -99;
   int nRed = -99;

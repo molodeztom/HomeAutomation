@@ -58,7 +58,8 @@ History:
 20240102  V1.09:  c evaluate light values show on display
 20241002  V1.10:  c debug values
 20240104  V1.11:  c debug removed now shows lux, red, green... in display and version
-20230104  V1.12:  c Todos solved, new sensor capability RGB
+20240104  V1.12:  c Todos solved, new sensor capability RGB
+20240105  V1.13:  + sensor capabilities from sensor if version > 1
 
 
  */
@@ -90,7 +91,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.12";
+const String sSoftware = "HubESPNow V1.13";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -390,8 +391,8 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-  sSensor[6].sSensorCapabilities = 0;
-  sSensor[6].sSensorCapabilities = RGB_ON;
+  //sSensor[6].sSensorCapabilities = 0; TODO remove sensor 6 sends capabilities via espnow
+  //sSensor[6].sSensorCapabilities = RGB_ON;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -650,6 +651,8 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 
     if ((sSensor[iChannelNr]).nVersion == 1)
     {
+     //version > 1 delivers capabilities
+      sSensor[iChannelNr].sSensorCapabilities = sESPReceive.sSensorCapabilities;
       // sensor interface version 2 with RGB values
       if (sSensor[iChannelNr].sSensorCapabilities & RGB_ON)
       {

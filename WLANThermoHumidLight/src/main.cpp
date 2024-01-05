@@ -12,7 +12,9 @@ Home Automation Project
   20240101  V0.2: Sensor auslesen und Serial Output
   20240101  V0.3: ESPNow Send aus WLANThermoHumidExt hinzu neu auch HomeAutomationCommon.h verwendet
   20240102  V0.4: send all light sensor values over espnow
-  20230105  V1.0: cleanup
+  20240105  V1.0: cleanup
+  20240105  V1.1: send sensor capabilities
+
 
 
 */
@@ -233,6 +235,8 @@ void SendValuesESPNow()
 
   data.nVersion = 1; // V1: including Light
   data.iSensorChannel = 6;
+  data.sSensorCapabilities = 0;
+  data.sSensorCapabilities = RGB_ON;
   // check battery voltage TODO activate on real pcb
   // data.fVoltage = fVoltage;
   data.nColorTemp = nColorTemp;
