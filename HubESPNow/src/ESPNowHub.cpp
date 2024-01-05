@@ -57,7 +57,7 @@ History:
 20240102  V1.08:  c compiled with HomeAutomationCommon.h V2.2 including data struct for light values
 20240102  V1.09:  c evaluate light values show on display
 20241002  V1.10:  c debug values
-20240104  V1.20:  c debug removed now shows lux in display and version
+20240104  V1.11:  c debug removed now shows lux, red, green... in display and version
 
 
 
@@ -92,7 +92,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.10";
+const String sSoftware = "HubESPNow V1.11";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -145,6 +145,11 @@ char textSensHumi[nMaxSensors][22];
 char textSensAtmo[nMaxSensors][22];
 char textSensLight[nMaxSensors][22]; // TODO not needed remove
 char textSensLux[nMaxSensors][22];
+char textSensRed[nMaxSensors][22];
+char textSensGreen[nMaxSensors][22];
+char textSensBlue[nMaxSensors][22];
+char textSensClear[nMaxSensors][22];
+char textSensColorTemp[nMaxSensors][22];
 
 String sNewSensorChannel;
 String sNewSensorMAC;
@@ -749,10 +754,36 @@ void sendDataToMainStation()
         jsonDocument["iAtmo"] = sSensor[n].iAtmo;
         iCheckSum += sSensor[n].iAtmo;
       }
+
       if ((sSensor[n].nLux != InvalidMeasurement))
       {
         jsonDocument["nLux"] = sSensor[n].nLux;
         iCheckSum += sSensor[n].nLux;
+      }
+      if ((sSensor[n].nRed != InvalidMeasurement))
+      {
+        jsonDocument["nRed"] = sSensor[n].nRed;
+        iCheckSum += sSensor[n].nRed;
+      }
+      if ((sSensor[n].nGreen != InvalidMeasurement))
+      {
+        jsonDocument["nGreen"] = sSensor[n].nGreen;
+        iCheckSum += sSensor[n].nGreen;
+      }
+      if ((sSensor[n].nBlue != InvalidMeasurement))
+      {
+        jsonDocument["nBlue"] = sSensor[n].nBlue;
+        iCheckSum += sSensor[n].nBlue;
+      }
+      if ((sSensor[n].nClear != InvalidMeasurement))
+      {
+        jsonDocument["nClear"] = sSensor[n].nClear;
+        iCheckSum += sSensor[n].nClear;
+      }
+      if ((sSensor[n].nColorTemp != InvalidMeasurement))
+      {
+        jsonDocument["nColor"] = sSensor[n].nColorTemp;
+        iCheckSum += sSensor[n].nColorTemp;
       }
 
       jsonDocument["iCSum"] = iCheckSum;
@@ -888,7 +919,16 @@ void formatSensData()
       sprintf(textSensTemp[n], "%2.i.%i °C", sSensor[n].iTempA / 100, abs(sSensor[n].iTempA) % 100);
       sprintf(textSensHumi[n], "%i.%i  %%", (sSensor[n].iHumi / 10) / 10, abs(sSensor[n].iHumi / 10) % 10);
       sprintf(textSensAtmo[n], "%i.%1i hPA", (sSensor[n].iAtmo / 10) / 10, abs(sSensor[n].iAtmo / 10) % 10);
-      sprintf(textSensLux[n], "%i Lux", (sSensor[n].nLux));
+      // only new sensor version TODO replace by sensor capabilities
+      if (sSensor[n].nVersion == 1)
+      {
+        sprintf(textSensLux[n], "%i Lux", (sSensor[n].nLux));
+        sprintf(textSensRed[n], "%i %i %i RGB", (sSensor[n].nRed), (sSensor[n].nGreen), (sSensor[n].nBlue));
+        //  sprintf(textSensGreen[n], "%i Green", (sSensor[n].nGreen));
+        // sprintf(textSensBlue[n], "%i Blue", (sSensor[n].nBlue));
+        sprintf(textSensClear[n], "%i Clear", (sSensor[n].nClear));
+        sprintf(textSensColorTemp[n], "%i Color", (sSensor[n].nColorTemp));
+      }
 
       debug("TempA: ");
       debugln(textSensTemp[n]);
@@ -947,10 +987,15 @@ void drawSens5()
 void drawSens6()
 {
 
-  display.setFont(ArialMT_Plain_24);
+  display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
-  display.drawString(25, 2, textSensLux[6]);
-  // display.drawString(25, 28, textSensHumi[6]);
+  display.drawString(5, 2, textSensLux[6]);
+  display.drawString(5, 18, textSensRed[6]);
+  // display.drawString(20, 2, textSensGreen[6]);
+  // display.drawString(25, 2, textSensBlue[6]);
+  display.drawString(5, 28, textSensClear[6]);
+  display.drawString(5, 40, textSensColorTemp[6]);
+
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.drawString(61, 54, "Breadboard");
