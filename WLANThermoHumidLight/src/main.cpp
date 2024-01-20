@@ -14,6 +14,7 @@ Home Automation Project
   20240102  V0.4: send all light sensor values over espnow
   20240105  V1.0: cleanup
   20240105  V1.1: send sensor capabilities
+  20240120  V1.2: Add humidity sensor gy-21 HTU21 
 
 
 
@@ -30,6 +31,7 @@ Home Automation Project
 #include "Spi.h"
 #include <Wire.h>
 #include "Adafruit_TCS34725.h"
+#include "Adafruit_HTU21DF.h"
 
 #include <HomeAutomationCommon.h>
 
@@ -49,7 +51,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "ThermoHumiLightSens V1.0";
+const String sSoftware = "ThermoHumiLightSens V1.2";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -88,6 +90,7 @@ volatile bool callbackCalled;
 MEMORYDATA statinfo;
 
 uint16_t nRed, nGreen, nBlue, nClear, nColorTemp, nLux; // sensor values
+float fTemp, fRelHum;
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -106,13 +109,14 @@ uint16_t nRed, nGreen, nBlue, nClear, nColorTemp, nLux; // sensor values
  **************************/
 /* Initialise with specific int time and gain values */
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_614MS, TCS34725_GAIN_1X);
-
+Adafruit_HTU21DF htu = Adafruit_HTU21DF();
 // forward declarations
 
 uint32_t calculateCRC32(const uint8_t *data, size_t length);
 void UpdateRtcMemory();
 void ScanForSlave();
 void MeasureLightValues();
+void MeasureTempHumi();
 void SendValuesESPNow();
 
 void setup()
@@ -131,7 +135,7 @@ void setup()
 
   if (tcs.begin())
   {
-    Serial.println("Found sensor");
+    Serial.println("Found TCS sensor");
   }
   else
   {
@@ -139,6 +143,11 @@ void setup()
     while (1)
       ;
   }
+  if(htu.begin()){
+    Serial.println("Found HTU21 sensor");
+  }
+
+  
 
   // digitalWrite(LEDON, HIGH); //switch on white LED
 
@@ -195,6 +204,7 @@ void loop()
   delay(100);                     // wait for a second
   digitalWrite(LED_BUILTIN, LOW); // turn the LED off by making the voltage LOW
   MeasureLightValues();
+  MeasureTempHumi();
   SendValuesESPNow();
 
   delay(20000); // wait for a second
@@ -228,6 +238,15 @@ void MeasureLightValues()
   Serial.print(" ");
   Serial.println(" ");
 }
+void MeasureTempHumi()
+{
+   fTemp = htu.readTemperature();
+     fRelHum = htu.readHumidity();
+    Serial.print("Temp: "); Serial.print(fTemp); Serial.print(" C");
+    Serial.print("\t\t");
+    Serial.print("Humidity: "); Serial.print(fRelHum); Serial.println(" \%");
+}
+
 
 void SendValuesESPNow()
 {
