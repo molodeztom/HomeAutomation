@@ -60,6 +60,8 @@ History:
 20240104  V1.11:  c debug removed now shows lux, red, green... in display and version
 20240104  V1.12:  c Todos solved, new sensor capability RGB
 20240105  V1.13:  + sensor capabilities from sensor if version > 1
+20240121  V1.14:  c sensor capabilites RGB was double in screen2
+20240121  V1.15:  + Humi and TempB from breadboard sensor 6
 
 
  */
@@ -91,7 +93,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.13";
+const String sSoftware = "HubESPNow V1.15";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -391,8 +393,8 @@ void setup()
   sSensor[4].sSensorCapabilities = TEMPA_ON | TEMPB_ON;
   sSensor[5].sSensorCapabilities = 0;
   sSensor[5].sSensorCapabilities = TEMPA_ON | VOLT_ON | HUMI_ON;
-  //sSensor[6].sSensorCapabilities = 0; TODO remove sensor 6 sends capabilities via espnow
-  //sSensor[6].sSensorCapabilities = RGB_ON;
+  // sSensor[6].sSensorCapabilities = 0; TODO remove sensor 6 sends capabilities via espnow
+  // sSensor[6].sSensorCapabilities = RGB_ON;
 
   // initialize pcf8574
   pcf857X.begin();
@@ -651,30 +653,32 @@ void on_receive_data(uint8_t *mac, uint8_t *r_data, uint8_t len)
 
     if ((sSensor[iChannelNr]).nVersion == 1)
     {
-     //version > 1 delivers capabilities
+      // version > 1 delivers capabilities
       sSensor[iChannelNr].sSensorCapabilities = sESPReceive.sSensorCapabilities;
+      debugln("Sensor Version 1 interface");
       // sensor interface version 2 with RGB values
       if (sSensor[iChannelNr].sSensorCapabilities & RGB_ON)
-      {
-        sSensor[iChannelNr].nLux = sESPReceive.nLux;
-        debug("Lux: ");
-        debugln(sSensor[iChannelNr].nLux);
-        sSensor[iChannelNr].nRed = sESPReceive.nRed;
-        debug("Red: ");
-        debugln(sSensor[iChannelNr].nRed);
-        sSensor[iChannelNr].nGreen = sESPReceive.nGreen;
-        debug("Green: ");
-        debugln(sSensor[iChannelNr].nGreen);
-        sSensor[iChannelNr].nBlue = sESPReceive.nBlue;
-        debug("Blue: ");
-        debugln(sSensor[iChannelNr].nBlue);
-        sSensor[iChannelNr].nColorTemp = sESPReceive.nColorTemp;
-        debug("ColorTemp: ");
-        debugln(sSensor[iChannelNr].nColorTemp);
-        sSensor[iChannelNr].nClear = sESPReceive.nClear;
-        debug("Clear: ");
-        debugln(sSensor[iChannelNr].nClear);
-      }
+        if (sSensor[iChannelNr].sSensorCapabilities)
+        {
+          sSensor[iChannelNr].nLux = sESPReceive.nLux;
+          debug("Lux: ");
+          debugln(sSensor[iChannelNr].nLux);
+          sSensor[iChannelNr].nRed = sESPReceive.nRed;
+          debug("Red: ");
+          debugln(sSensor[iChannelNr].nRed);
+          sSensor[iChannelNr].nGreen = sESPReceive.nGreen;
+          debug("Green: ");
+          debugln(sSensor[iChannelNr].nGreen);
+          sSensor[iChannelNr].nBlue = sESPReceive.nBlue;
+          debug("Blue: ");
+          debugln(sSensor[iChannelNr].nBlue);
+          sSensor[iChannelNr].nColorTemp = sESPReceive.nColorTemp;
+          debug("ColorTemp: ");
+          debugln(sSensor[iChannelNr].nColorTemp);
+          sSensor[iChannelNr].nClear = sESPReceive.nClear;
+          debug("Clear: ");
+          debugln(sSensor[iChannelNr].nClear);
+        }
     }
 
     iLastSSinceLastRead = sSensor[iChannelNr].iTimeSinceLastRead; // remember for display
@@ -734,6 +738,11 @@ void sendDataToMainStation()
       {
         jsonDocument["iTempA"] = sSensor[n].iTempA;
         iCheckSum += sSensor[n].iTempA;
+      }
+      if ((sSensor[n].iTempB < 4000) && (sSensor[n].iTempB > -4000))
+      {
+        jsonDocument["iTempB"] = sSensor[n].iTempB;
+        iCheckSum += sSensor[n].iTempB;
       }
       if ((sSensor[n].iHumi < 10500) && (sSensor[n].iHumi > 300))
       {
@@ -1052,7 +1061,7 @@ void drawSensDetail2()
   uint16_t iSensCap = sSensor[iCurSensorDisplay].sSensorCapabilities;
   // convert bit mask into text
   sprintf(textCapabilities, "TempA: %s Humi: %s Volt: %s ", (iSensCap & TEMPA_ON) ? "1" : "0", (iSensCap & HUMI_ON) ? "1" : "0", (iSensCap & VOLT_ON) ? "1" : "0");
-  sprintf(textCapabilities1, "Atmo: %s TempB: %s RGB: %s ", (iSensCap & ATMO_ON) ? "1" : "0", (iSensCap & TEMPB_ON) ? "1" : "0", (iSensCap & LIGHT_ON) ? "1" : "0");
+  sprintf(textCapabilities1, "Atmo: %s TempB: %s Light: %s ", (iSensCap & ATMO_ON) ? "1" : "0", (iSensCap & TEMPB_ON) ? "1" : "0", (iSensCap & LIGHT_ON) ? "1" : "0");
   sprintf(textCapabilities2, "RGB: %s Opt2: %s Opt3: %s ", (iSensCap & RGB_ON) ? "1" : "0", (iSensCap & OPT2_ON) ? "1" : "0", (iSensCap & OPT3_ON) ? "1" : "0");
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);

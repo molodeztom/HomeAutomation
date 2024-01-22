@@ -14,7 +14,8 @@ Home Automation Project
   20240102  V0.4: send all light sensor values over espnow
   20240105  V1.0: cleanup
   20240105  V1.1: send sensor capabilities
-  20240120  V1.2: Add humidity sensor gy-21 HTU21 
+  20240120  V1.2: Add humidity sensor gy-21 HTU21
+  20240121  V1.3: Humidity sensor via MQTT
 
 
 
@@ -51,7 +52,7 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "ThermoHumiLightSens V1.2";
+const String sSoftware = "ThermoHumiLightSens V1.3";
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -74,7 +75,6 @@ const String sSoftware = "ThermoHumiLightSens V1.2";
 #define SEND_TIMEOUT 2450 // 245 Millisekunden timeout
 #define CHAN 6            // sensor channel 1 = Developmentboard 2 = ESP gelötet
 #define SLEEP_TIME 90E6   // Zeit in  uS z.B. 5 Minuten entspricht 300E6 normal 90
-
 
 // Datenstruktur für das Rtc Memory mit Prüfsumme um die Gültigkeit
 // zu überprüfen damit wird die MAC Adresse gespeichert
@@ -143,11 +143,10 @@ void setup()
     while (1)
       ;
   }
-  if(htu.begin()){
+  if (htu.begin())
+  {
     Serial.println("Found HTU21 sensor");
   }
-
-  
 
   // digitalWrite(LEDON, HIGH); //switch on white LED
 
@@ -193,7 +192,6 @@ void setup()
   // remember callback already called
   callbackCalled = false;
   //------------------------------------------------------------------------------------------WIFI end
-  
 }
 
 void loop()
@@ -240,22 +238,27 @@ void MeasureLightValues()
 }
 void MeasureTempHumi()
 {
-   fTemp = htu.readTemperature();
-     fRelHum = htu.readHumidity();
-    Serial.print("Temp: "); Serial.print(fTemp); Serial.print(" C");
-    Serial.print("\t\t");
-    Serial.print("Humidity: "); Serial.print(fRelHum); Serial.println(" \%");
+  fTemp = htu.readTemperature();
+  fRelHum = htu.readHumidity();
+  Serial.print("Temp: ");
+  Serial.print(fTemp);
+  Serial.print(" C");
+  Serial.print("\t\t");
+  Serial.print("Humidity: ");
+  Serial.print(fRelHum);
+  Serial.println(" \%");
 }
-
 
 void SendValuesESPNow()
 {
   ESPNOW_DATA_STRUCTURE data;
+  Serial.println("Send to ESP");
 
   data.nVersion = 1; // V1: including Light
   data.iSensorChannel = 6;
   data.sSensorCapabilities = 0;
-  data.sSensorCapabilities = RGB_ON;
+  data.sSensorCapabilities = RGB_ON | TEMPB_ON | HUMI_ON;
+
   // check battery voltage TODO activate on real pcb
   // data.fVoltage = fVoltage;
   data.nColorTemp = nColorTemp;
@@ -264,14 +267,14 @@ void SendValuesESPNow()
   data.nGreen = nGreen;
   data.nBlue = nBlue;
   data.nClear = nClear;
-  
+  data.fESPNowHumi = fRelHum;
+  data.fESPNowTempB = fTemp;
 
   uint8_t bs[sizeof(data)];
   // Datenstruktur in den Sendebuffer kopieren
   memcpy(bs, &data, sizeof(data));
   // Daten an Thermometer senden
   esp_now_send(NULL, bs, sizeof(data)); // NULL means send to all peers
-
 }
 
 // Unterprogramm zum Berechnen der Prüfsumme
