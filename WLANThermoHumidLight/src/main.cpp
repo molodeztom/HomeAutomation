@@ -16,6 +16,7 @@ Home Automation Project
   20240105  V1.1: send sensor capabilities
   20240120  V1.2: Add humidity sensor gy-21 HTU21
   20240121  V1.3: Humidity sensor via MQTT
+  20240124  V1.4e:  use lib https://github.com/enjoyneering/HTU2xD_SHT2x_Si70xx/tree/main
 
 
 
@@ -32,7 +33,7 @@ Home Automation Project
 #include "Spi.h"
 #include <Wire.h>
 #include "Adafruit_TCS34725.h"
-#include "Adafruit_HTU21DF.h"
+#include <HTU21D.h>
 
 #include <HomeAutomationCommon.h>
 
@@ -90,7 +91,8 @@ volatile bool callbackCalled;
 MEMORYDATA statinfo;
 
 uint16_t nRed, nGreen, nBlue, nClear, nColorTemp, nLux; // sensor values
-float fTemp, fRelHum;
+float fTemp, fRelHum, fCompHum;
+int iHeaterTest = -1; // time in ticks about 1 seconds heater on 4 every 2 minutes -1 test off
 
 /* I2C Bus */
 // if you use ESP8266-01 with not default SDA and SCL pins, define these 2 lines, else delete them
@@ -109,7 +111,15 @@ float fTemp, fRelHum;
  **************************/
 /* Initialise with specific int time and gain values */
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_614MS, TCS34725_GAIN_1X);
-Adafruit_HTU21DF htu = Adafruit_HTU21DF();
+/*
+HTU21D(resolution)
+resolution:
+HTU21D_RES_RH12_TEMP14 - RH: 12Bit, Temperature: 14Bit, by default
+HTU21D_RES_RH8_TEMP12  - RH: 8Bit,  Temperature: 12Bit
+HTU21D_RES_RH10_TEMP13 - RH: 10Bit, Temperature: 13Bit
+HTU21D_RES_RH11_TEMP11 - RH: 11Bit, Temperature: 11Bit
+*/
+HTU21D htu21d(HTU21D_RES_RH12_TEMP14);
 // forward declarations
 
 uint32_t calculateCRC32(const uint8_t *data, size_t length);
@@ -143,9 +153,20 @@ void setup()
     while (1)
       ;
   }
-  if (htu.begin())
+  if (htu21d.begin())
   {
+    // TODO remove
+    int htuFirmwareVersion = 0;
+    int htuDeviceID = 0;
+    htuFirmwareVersion = htu21d.readFirmwareVersion();
+    htuDeviceID = htu21d.readDeviceID();
     Serial.println("Found HTU21 sensor");
+    Serial.print("Version: ");
+    Serial.println(htuFirmwareVersion);
+    Serial.print("DeviceID: ");
+    Serial.println(htuDeviceID);
+    htu21d.setHeater(HTU21D_OFF);
+    Serial.println("Heater Off");
   }
 
   // digitalWrite(LEDON, HIGH); //switch on white LED
@@ -197,15 +218,15 @@ void setup()
 void loop()
 {
 
-  digitalWrite(LED_BUILTIN, HIGH); // turn the LED on (HIGH is the voltage level)
+  digitalWrite(LED_BUILTIN, LOW); // turn the LED on (HIGH is the voltage level)
 
-  delay(100);                     // wait for a second
-  digitalWrite(LED_BUILTIN, LOW); // turn the LED off by making the voltage LOW
+  delay(100);                      // wait for a second
+  digitalWrite(LED_BUILTIN, HIGH); // turn the LED off by making the voltage LOW
   MeasureLightValues();
   MeasureTempHumi();
   SendValuesESPNow();
 
-  delay(20000); // wait for a second
+  delay(25000); // wait for 0.5 second
 }
 
 // read sensor values and calculate
@@ -238,14 +259,39 @@ void MeasureLightValues()
 }
 void MeasureTempHumi()
 {
-  fTemp = htu.readTemperature();
-  fRelHum = htu.readHumidity();
+  fTemp = htu21d.readTemperature();
+  fRelHum = htu21d.readHumidity();
+  fCompHum = htu21d.readCompensatedHumidity(fTemp);
+  // 60 seconds on 60 seconds off
+  if (iHeaterTest > 4)
+  {
+    htu21d.setHeater(HTU21D_ON);
+    Serial.println("Heater On");
+  }
+  else
+  {
+    htu21d.setHeater(HTU21D_OFF);
+    Serial.println("Heater Off");
+  }
+  if (iHeaterTest == 0)
+  {
+    iHeaterTest = 8; // reset value
+  }
+  iHeaterTest--;
+  
+
+  // TODO remove
+
+  // fRelHum = htu.readHumidity();
   Serial.print("Temp: ");
   Serial.print(fTemp);
   Serial.print(" C");
   Serial.print("\t\t");
   Serial.print("Humidity: ");
   Serial.print(fRelHum);
+  Serial.println(" \%");
+  Serial.print("CompHumidity: ");
+  Serial.print(fCompHum);
   Serial.println(" \%");
 }
 

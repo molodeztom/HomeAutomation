@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"name": "WLANThermoHumidExt",
+			"path": "WLANThermoHumidExt"
+		},
+		{
+			"name": "WLANThermoExt",
+			"path": "WLANThermoExt"
+		},
+		{
+			"name": "ESPHubHWTest",
+			"path": "ESPHubHWTest"
+		},
+		{
+			"name": "HubESPNow",
+			"path": "HubESPNow"
+		},
+		{
+			"name": "HubESPWLAN",
+			"path": "HubESPWLAN"
+		},
+		{
+			"name": "WLANThermoHumidLight",
+			"path": "WLANThermoHumidLight"
+		}
+	],
+	"settings": {}
+}
