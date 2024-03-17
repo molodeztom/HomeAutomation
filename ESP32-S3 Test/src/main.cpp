@@ -1,4 +1,26 @@
+/**************************************************************************
+ESP32 Test Project
+   
+
+  Hardware:
+  ESP32-S3-DevKitC-1 mit Wroom N16R8
+
+  Try different methods for deepsleep and wakeup
+
+  History: master if not shown otherwise
+  20240317  V0.1: Wakeup with timer and count boots in RTC memory
+
+
+
+
+*/
 #include <Arduino.h>
+
+#define  BUTTON_PIN_BITMASK 0xF0000000
+
+const String sSoftware = "ESP32 DeepSleep Tests V0.1";
+
+RTC_DATA_ATTR int bootCount = 0;
 
 // put function declarations here:
 int myFunction(int, int);
@@ -6,12 +28,27 @@ void print_wakeup_reason();
 
 void setup() {
     Serial.begin(56000);
-      
-    Serial.println("Setup");
+    Serial.flush();
+    delay(2000);
+    Serial.println();
+    Serial.println(sSoftware);
+    ++bootCount;
     delay(500);
     Serial.println("in setup routine");
+    Serial.println("Boot Nr.: " + String(bootCount));
     print_wakeup_reason();
     esp_sleep_enable_timer_wakeup(10e+6);
+  /*
+    First we configure the wake up source
+    We set our ESP32 to wake up for an external trigger.
+    There are two types for ESP32, ext0 and ext1 .
+    ext0 uses RTC_IO to wakeup thus requires RTC peripherals
+    to be on while ext1 uses RTC Controller so doesnt need
+    peripherals to be powered on.
+    Note that using internal pullups/pulldowns also requires
+    RTC peripherals to be turned on.
+  */
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_15,1); //1 = High, 0 = Low
     //esp_deep_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
 
   
@@ -19,14 +56,14 @@ void setup() {
 
 void loop() {
 Serial.println("Loop Start");
+neopixelWrite(RGB_BUILTIN,0,60,0); // Green
 
-neopixelWrite(48,RGB_BRIGHTNESS,0,0); // Red
 delay(5000);
-//neopixelWrite(48,0,50,0);
-//delay(1000);
-neopixelWrite(50,50,0,50);
-delay(5000);
-//neopixelWrite(0,50,0,50);
+
+neopixelWrite(RGB_BUILTIN,0,0,0); // Red
+delay(10000);
+
+Serial.println("Loop End");
 Serial.flush();
 esp_deep_sleep_start();
 
