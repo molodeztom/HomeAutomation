@@ -42,6 +42,9 @@
 		{
 			"name": "WLANThermoHumidLight",
 			"path": "WLANThermoHumidLight"
+		},
+		{
+			"path": "ESP32-S3 Test"
 		}
 	],
 	"settings": {}

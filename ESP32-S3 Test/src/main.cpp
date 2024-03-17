@@ -24,7 +24,7 @@ neopixelWrite(48,RGB_BRIGHTNESS,0,0); // Red
 delay(5000);
 //neopixelWrite(48,0,50,0);
 //delay(1000);
-neopixelWrite(0,0,0,00);
+neopixelWrite(50,50,0,50);
 delay(5000);
 //neopixelWrite(0,50,0,50);
 Serial.flush();
