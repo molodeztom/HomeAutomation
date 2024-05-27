@@ -40,11 +40,11 @@
 			"path": "HubESPWLAN"
 		},
 		{
-			"name": "WLANThermoHumidLight",
-			"path": "WLANThermoHumidLight"
+			"path": "ESP32-S3 Test"
 		},
 		{
-			"path": "ESP32-S3 Test"
+			"name": "LoRaTestESP32",
+			"path": "../LoRaTestESP32"
 		}
 	],
 	"settings": {}
