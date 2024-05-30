@@ -43,8 +43,11 @@
 			"path": "ESP32-S3 Test"
 		},
 		{
-			"name": "LoRaTestESP32",
-			"path": "../LoRaTestESP32"
+			"name": "RainSensor",
+			"path": "RainSensor"
+		},
+		{
+			"path": "LoraWLANBridge"
 		}
 	],
 	"settings": {}
