@@ -17,16 +17,42 @@ RainSensor
   History: master if not shown otherwise
   20240525  V0.1: Wakeup with timer and count boots in RTC memory (Copy from ESP32-S3 Test V0.2)
   20240528  V0.2: Send Hello world periodically
+  20240528  V0.3: Send data structure with some abitrary values
 
 
 
 */
 
 #include <Arduino.h>
-// #include <SoftwareSerial.h>
+// 1 means debug on 0 means off
+#define DEBUG 1
 #include "LoRa_E32.h"
+//Data structure for message
+#include <HomeAutomationCommon.h>
+const String sSoftware = "RainSensor V0.3";
+
+// debug macro
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Serial.println(x)
+#define debugv(s, v)    \
+  {                     \
+    Serial.print(F(s)); \
+    Serial.println(v);  \
+  }
+
+#else
+#define debug(x)
+#define debugln(x)
+#define debugv(format, ...)
+#define debugarg(...)
+#endif
 
 #define BUTTON_PIN_BITMASK 0x8000
+
+/***************************
+ * Pin Settings
+ **************************/
 /*PIN definitions
 LoRa
 M0 GPI16
@@ -42,29 +68,36 @@ const byte M1 = GPIO_NUM_11;  // LoRa M1
 const byte TxD = GPIO_NUM_12; // TX to LoRa Rx
 const byte RxD = GPIO_NUM_13; // RX to LoRa Tx
 const byte AUX = GPIO_NUM_14; // Auxiliary
+const int ChannelNumber = 7;
+
+//global data
+
+float fTemp, fRelHum, fCompHum;
+
+
 
 // set LoRa to working mode 0  Transmitting
 // LoRa_E32 e32ttl(RxD, TxD,AUX, M0, M1, UART_BPS_9600);
 
+RTC_DATA_ATTR int bootCount = 0;
 LoRa_E32 e32ttl(&Serial1, AUX, M0, M1); // RX, TX
 
-const String sSoftware = "ESP32 LoRa Test V0.3";
 
-RTC_DATA_ATTR int bootCount = 0;
-
-// put function declarations here:
-
+// forward declarations
 void printParameters(struct Configuration configuration);
+void measureTempHumi();
+void sendValuesLoRa();
 
 void setup()
 {
   Serial.begin(56000);
-  Serial.flush();
-  delay(2000);
-  Serial.println();
+  #ifdef DEBUG
+  delay(4000);
+  Serial.println("START");
   Serial.println(sSoftware);
+#endif
+//Serial1 connects to LoRa module
   Serial1.begin(9600, SERIAL_8N1, RxD, TxD);
-  ++bootCount;
   delay(500);
   Serial.println("in setup routine");
   Serial.println("Boot Nr.: " + String(bootCount));
@@ -93,15 +126,13 @@ void loop()
   Serial.println("Loop Start");
   neopixelWrite(RGB_BUILTIN, 0, 60, 60); // Green
    ++bootCount;
-
   delay(100);
-
+measureTempHumi();
   neopixelWrite(RGB_BUILTIN, 0, 0, 0); // Red
     Serial.println("Hi, I'm going to send message!");
- 
-  // Send message
-  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  delay(1000);
+sendValuesLoRa();
+
+   delay(1000);
 
  /*  // If something available
   if (e32ttl.available() > 1)
@@ -130,8 +161,40 @@ void loop()
   String result = rs.getResponseDescription();
   Serial.println(result); */
   Serial.println("Loop End");
-  Serial.flush();
+
   //esp_deep_sleep_start();
+}
+
+void sendValuesLoRa(){
+   ESPNOW_DATA_STRUCTURE data;
+  //fill data struct
+  data.nVersion = 1; // V1: including Light
+  data.iSensorChannel = ChannelNumber;
+  data.sSensorCapabilities = 0;
+  data.sSensorCapabilities = TEMPB_ON | HUMI_ON;
+
+  // check battery voltage TODO activate on real pcb
+  // data.fVoltage = fVoltage;
+
+  data.fESPNowHumi = fRelHum;
+  data.fESPNowTempB = fTemp;
+    uint8_t bs[sizeof(data)];
+  // copy data to send buffer
+  memcpy(bs, &data, sizeof(data));
+   // Send message
+  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  rs = e32ttl.sendMessage(bs,sizeof(data));
+
+  delay(1000);
+
+}
+
+void measureTempHumi(){
+
+float fTemp, fRelHum;
+fTemp = 21.3;
+fRelHum = 90.2;
+
 }
 
 void printParameters(struct Configuration configuration) {
