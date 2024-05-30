@@ -68,9 +68,16 @@ const byte M1 = GPIO_NUM_11;  // LoRa M1
 const byte TxD = GPIO_NUM_12; // TX to LoRa Rx
 const byte RxD = GPIO_NUM_13; // RX to LoRa Tx
 const byte AUX = GPIO_NUM_14; // Auxiliary
-const int ChannelNumber = 7;
+const int ChannelNumber = 8;
 
 //global data
+struct LORA_DATA_STRUCTURE
+{
+  int iSensorChannel = 42;  // default for none received
+  int iTempA = 26;
+  char message[10] = "Kitchen";
+  int nHumi = 62;
+};
 
 float fTemp, fRelHum, fCompHum;
 
@@ -117,7 +124,7 @@ void setup()
   Serial.println("Hi, I'm going to send message!");
  
   // Send message
-  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  //ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
    
 }
 
@@ -166,9 +173,10 @@ sendValuesLoRa();
 }
 
 void sendValuesLoRa(){
-   ESPNOW_DATA_STRUCTURE data;
+   LORA_DATA_STRUCTURE data;
+   int nDataSize = 0;
   //fill data struct
-  data.nVersion = 1; // V1: including Light
+/*   data.nVersion = 1; // V1: including Light
   data.iSensorChannel = ChannelNumber;
   data.sSensorCapabilities = 0;
   data.sSensorCapabilities = TEMPB_ON | HUMI_ON;
@@ -176,15 +184,26 @@ void sendValuesLoRa(){
   // check battery voltage TODO activate on real pcb
   // data.fVoltage = fVoltage;
 
-  data.fESPNowHumi = fRelHum;
-  data.fESPNowTempB = fTemp;
+  data.fESPNowHumi = 12*100;
+  data.fESPNowTempA = 13; */
+/* data.iSensorChannel = 8;
+data.iTempA = 23;
+data.nHumi = 64; */
     uint8_t bs[sizeof(data)];
+    data.iSensorChannel = 8;
+    data.iTempA = 18;
+    data.nHumi = 45;
   // copy data to send buffer
+  nDataSize = sizeof(data);
   memcpy(bs, &data, sizeof(data));
-   // Send message
-  ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  rs = e32ttl.sendMessage(bs,sizeof(data));
 
+   // Send message
+   Serial.println("DataSize: ");
+   Serial.println(nDataSize);
+  //ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
+  ResponseStatus rs = e32ttl.sendMessage(bs,sizeof(data));
+ //    ResponseStatus rs = e32ttl.sendMessage(&data, sizeof(data));
+Serial.println(rs.getResponseDescription());
   delay(1000);
 
 }
@@ -192,8 +211,8 @@ void sendValuesLoRa(){
 void measureTempHumi(){
 
 float fTemp, fRelHum;
-fTemp = 21.3;
-fRelHum = 90.2;
+fTemp = 21.3  * 100;
+fRelHum = 90.2 * 100;
 
 }
 

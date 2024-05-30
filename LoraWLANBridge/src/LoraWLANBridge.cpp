@@ -50,6 +50,15 @@ const byte RxD = GPIO_NUM_13; // RX to LoRa Tx
 const byte AUX = GPIO_NUM_14; // Auxiliary
 const int ChannelNumber = 7;
 
+struct LORA_DATA_STRUCTURE
+{
+  int iSensorChannel = 99;  // default for none received
+  int iTempA = 99;
+  char message[10];
+  int nHumi = 25;
+};
+
+
 // set LoRa to working mode 0  Transmitting
 // LoRa_E32 e32ttl(RxD, TxD,AUX, M0, M1, UART_BPS_9600);
 // use hardware serial #1
@@ -120,19 +129,34 @@ void loop()
 
 void receiveValuesLoRa()
 {
-  ESPNOW_DATA_STRUCTURE sLoRaReceiveData;
-  int iChannelNr = ChannelNumber;
+  LORA_DATA_STRUCTURE sLoRaReceiveData;
+
+
+
+
+  
+  int iChannelNr = 0;
+
   // If something available
   if (e32ttl.available() > 1)
   {
     // read the String message
     ResponseStructContainer rc = e32ttl.receiveMessage(sizeof(sLoRaReceiveData));
-    memcpy(&sLoRaReceiveData, rc.data, sizeof(sLoRaReceiveData));
+   memcpy(&sLoRaReceiveData, rc.data, sizeof(sLoRaReceiveData));
+  //  sLoRaReceiveData = *(LORA_DATA_STRUCTURE*) rc.data;
     // e32ttl.receiveMessage(sizeof(data));
     String result = rc.status.getResponseDescription();
     Serial.println(result);
 
     Serial.println("Received something");
+    int DataSize = sizeof(sLoRaReceiveData);
+    Serial.println("DataSize: ");
+Serial.println(DataSize);
+
+
+
+
+
 
     // Is something goes wrong print error
     if (rc.status.code != 1)
@@ -143,15 +167,35 @@ void receiveValuesLoRa()
     {
       // Print the data received
       Serial.println(rc.status.getResponseDescription());
+      Serial.println("Channel: ");
+      Serial.println(sLoRaReceiveData.iSensorChannel);
+      Serial.println("iTempA:");
+      Serial.println(sLoRaReceiveData.iTempA);
+      Serial.println("Humi: ");
+      Serial.println(sLoRaReceiveData.nHumi);
+      Serial.println(sLoRaReceiveData.message);
+
+
+  //iSensorChannel = 99;  // default for none received
+  int iTempA = 99;
+  String message;
+  byte nHumi = 99;
+
+     /*    iChannelNr = sLoRaReceiveData.iSensorChannel;
       debugln("Received Data");
-           debug("Channel nr.:");
+
+      debug("Channel nr.:");
       debugln(iChannelNr);
-      sSensor[iChannelNr].iTempB = roundf((sLoRaReceiveData.fESPNowTempB ) * 100);
-      debugln("TempB: ");
-      debugln(sSensor[iChannelNr].iTempB);
-      sSensor[iChannelNr].iHumi = roundf(sLoRaReceiveData.fESPNowHumi * 100);
+      sSensor[iChannelNr].iTempA = sLoRaReceiveData ;
+      debugln("TempA : ");
+      debugln(sSensor[iChannelNr].iTempA);
+
+      sSensor[iChannelNr].iHumi = roundf(sLoRaReceiveData.fESPNowHumi);
       debug("Humidity: ");
       debugln(sSensor[iChannelNr].iHumi);
+      debug("Version: ");
+      sSensor[iChannelNr].nVersion = sLoRaReceiveData.nVersion;
+      debugln(sSensor[iChannelNr].nVersion); */
     }
   }
 }
