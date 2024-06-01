@@ -80,13 +80,14 @@ enum eDATASOURCE
 {
   rainSensor,
   tempSensor,
-  humiSensor
+  humiSensor,
+  batterySensor
 };
 struct LORA_DATA_STRUCTURE
 {
   eDATASOURCE eDataSource;
   int iSensorChannel = 99; // default for none received
-  int iData = 26;
+  int iData = 99;
 };
 
 // sensor capabilities

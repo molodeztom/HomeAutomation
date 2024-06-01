@@ -153,25 +153,14 @@ void loop()
 
   // esp_deep_sleep_start();
 }
-
+/* optimized data structure to save bytes to transfer. We send only one measurement
+and name the measurement in eDataSource. So far the measurements are not different
+so the structure remains the same */
 void sendValuesLoRa()
 {
   LORA_DATA_STRUCTURE data;
   int nDataSize = 0;
-  // fill data struct
-  /*   data.nVersion = 1; // V1: including Light
-    data.iSensorChannel = ChannelNumber;
-    data.sSensorCapabilities = 0;
-    data.sSensorCapabilities = TEMPB_ON | HUMI_ON;
 
-    // check battery voltage TODO activate on real pcb
-    // data.fVoltage = fVoltage;
-
-    data.fESPNowHumi = 12*100;
-    data.fESPNowTempA = 13; */
-  /* data.iSensorChannel = 8;
-  data.iTempA = 23;
-  data.nHumi = 64; */
 
   uint8_t bs[sizeof(data)];
   data.iSensorChannel = 8;

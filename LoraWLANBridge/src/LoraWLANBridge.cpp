@@ -169,24 +169,7 @@ void receiveValuesLoRa()
       }
       Serial.println("Data: ");
       Serial.println(sLoRaReceiveData.iData);
-      // iSensorChannel = 99;  // default for none received
-   
 
-      /*    iChannelNr = sLoRaReceiveData.iSensorChannel;
-       debugln("Received Data");
-
-       debug("Channel nr.:");
-       debugln(iChannelNr);
-       sSensor[iChannelNr].iTempA = sLoRaReceiveData ;
-       debugln("TempA : ");
-       debugln(sSensor[iChannelNr].iTempA);
-
-       sSensor[iChannelNr].iHumi = roundf(sLoRaReceiveData.fESPNowHumi);
-       debug("Humidity: ");
-       debugln(sSensor[iChannelNr].iHumi);
-       debug("Version: ");
-       sSensor[iChannelNr].nVersion = sLoRaReceiveData.nVersion;
-       debugln(sSensor[iChannelNr].nVersion); */
     }
   }
 }
