@@ -11,7 +11,7 @@ Used in WeatherStation and HomeServer
 20230211  V1.3  rename float to int variable names
 20230212  V1.4  sensor capabilities
 20230212  V1.5  d do not set iLight to 0 on unused sensors
-20230212  V2.0  works with 2 different sensors now 
+20230212  V2.0  works with 2 different sensors now
 20240101  V2.1  JSON declaration removed in sensors not needed TODO add to ESPHub or in a new common include file
 20240102  V2.2  Add light sensor values to ESP NOW Data Structure
 20240106  V2.3  Sensor capabilities in ESPNOW struct receive when sensor version > 1
@@ -55,7 +55,7 @@ const int httpPort = 80;
  * Measurement Variables
  **************************/
 const float InvalidMeasurement = 999999; // value set when a value was not correctly received via serial and JSON
-const int nMaxSensors = 10;             // max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
+const int nMaxSensors = 10;              // max number of sensors allowed in system it is an array so starts from 0 to < nMaxSensors
 // used for ESP Now Data protocol same for sensors and ESPNowHub
 // TODO add interface version add sensor capabilities do it when programming a new sensor
 struct ESPNOW_DATA_STRUCTURE
@@ -65,7 +65,7 @@ struct ESPNOW_DATA_STRUCTURE
   float fESPNowTempB = -99; // Aussen B
   float fESPNowHumi = -99;
   float fESPNowVolt = -99; // Batterie Sensor
-  int nVersion = 1; //interface Version 0 w/o version only TempA to Volt, V1: including Light
+  int nVersion = 1;        // interface Version 0 w/o version only TempA to Volt, V1: including Light
   uint16_t sSensorCapabilities = 0;
   int nColorTemp = -99;
   int nLux = -99;
@@ -73,6 +73,20 @@ struct ESPNOW_DATA_STRUCTURE
   int nGreen = -99;
   int nBlue = -99;
   int nClear = -99;
+};
+// used for LORA transmition size optimized
+
+enum eDATASOURCE
+{
+  rainSensor,
+  tempSensor,
+  humiSensor
+};
+struct LORA_DATA_STRUCTURE
+{
+  eDATASOURCE eDataSource;
+  int iSensorChannel = 99; // default for none received
+  int iData = 26;
 };
 
 // sensor capabilities
@@ -83,7 +97,7 @@ const uint16_t VOLT_ON = 1 << 2;  // 4 (0x4);
 const uint16_t HUMI_ON = 1 << 3;  // 8 (0x8)
 const uint16_t LIGHT_ON = 1 << 4; // 16 (0x10)
 const uint16_t ATMO_ON = 1 << 5;  // 32 (0x20)
-const uint16_t RGB_ON = 1 << 6;  // 64 (0x40)
+const uint16_t RGB_ON = 1 << 6;   // 64 (0x40)
 const uint16_t OPT2_ON = 1 << 7;  // 128 (0x80)
 const uint16_t OPT3_ON = 1 << 8;  // 256 (0x100)
 // used for local storage in ESPNowHub
@@ -98,7 +112,7 @@ struct SENSOR_DATA
   int iVolt = InvalidMeasurement;
   int iAtmo = InvalidMeasurement;
   int iLight = InvalidMeasurement;
-  int nVersion = 0; //interface Version 0 w/o version only TempA to Volt, V1: including Light
+  int nVersion = 0; // interface Version 0 w/o version only TempA to Volt, V1: including Light
   int nColorTemp = InvalidMeasurement;
   int nLux = InvalidMeasurement;
   int nRed = InvalidMeasurement;
@@ -129,6 +143,6 @@ const int nMaxRxArray = 256;
 /***************************
  * JSON definitions
  **************************/
-//this in now in each file wher JSON is needed
-//const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
-//StaticJsonDocument<capacity> jsonDocument;
+// this in now in each file wher JSON is needed
+// const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
+// StaticJsonDocument<capacity> jsonDocument;
