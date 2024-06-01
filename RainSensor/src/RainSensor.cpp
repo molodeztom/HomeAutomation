@@ -75,6 +75,7 @@ LoRa_E32 e32ttl(&Serial1, AUX, M0, M1); // RX, TX
 void printParameters(struct Configuration configuration);
 void measureTempHumi();
 void sendValuesLoRa();
+void sendSingleData(LORA_DATA_STRUCTURE data);
 
 void setup()
 {
@@ -177,45 +178,36 @@ void sendValuesLoRa()
   // send temp
   data.eDataSource = tempSensor;
   data.iData = fTemp;
-  // copy data to send buffer
-  nDataSize = sizeof(data);
-  memcpy(bs, &data, sizeof(data));
-  // Send message
-  Serial.println("DataSize: ");
-  Serial.println(nDataSize);
-  // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  ResponseStatus rs = e32ttl.sendMessage(bs, sizeof(data));
-  //    ResponseStatus rs = e32ttl.sendMessage(&data, sizeof(data));
-  Serial.println(rs.getResponseDescription());
+  sendSingleData(data);
+
   delay(1000);
   // send humi
   data.eDataSource = humiSensor;
   data.iData = fRelHum;
-  // copy data to send buffer
-  nDataSize = sizeof(data);
-  memcpy(bs, &data, sizeof(data));
-  // Send message
-  Serial.println("DataSize: ");
-  Serial.println(nDataSize);
-  // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  rs = e32ttl.sendMessage(bs, sizeof(data));
-  //    ResponseStatus rs = e32ttl.sendMessage(&data, sizeof(data));
-  Serial.println(rs.getResponseDescription());
+   sendSingleData(data);
+
   delay(1000);
   // send rain
   data.eDataSource = rainSensor;
   data.iData = fRainMM;
+   sendSingleData(data);
+
+  delay(1000);
+}
+
+void sendSingleData(LORA_DATA_STRUCTURE data)
+{
+  uint8_t bs[sizeof(data)];
+
   // copy data to send buffer
-  nDataSize = sizeof(data);
   memcpy(bs, &data, sizeof(data));
   // Send message
   Serial.println("DataSize: ");
-  Serial.println(nDataSize);
+  Serial.println(sizeof(data));
   // ResponseStatus rs = e32ttl.sendMessage("Hello, world? "  + String(bootCount));
-  rs = e32ttl.sendMessage(bs, sizeof(data));
+  ResponseStatus rs = e32ttl.sendMessage(bs, sizeof(data));
   //    ResponseStatus rs = e32ttl.sendMessage(&data, sizeof(data));
   Serial.println(rs.getResponseDescription());
-  delay(1000);
 }
 
 void measureTempHumi()
