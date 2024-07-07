@@ -74,7 +74,7 @@ const byte bus = 4; //pin GPIO2 (NodeMCU) GPIO4 (ESP12-F Modul) verwenden
 float fVoltage;
 #define BATCALVOLT 0.01076923073; //Pre Kalibrierung bei VBatt 4,19 V genauer wird es am Empfänger kalibriert
 int cntSens = 0;                  //Anzahl Sensoren
-#define SENSCORR1A -0.43 //sensor -0.13 before here we saw already -0.3
+#define SENSCORR1A -0.1 //sensor -0.13 before here we saw already -0.3
 
 //Pins für DHT-22
 #define DHTPIN 14     // Digital pin connected to the DHT sensor (3 and 4 won't work)
