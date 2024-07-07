@@ -62,6 +62,7 @@ History:
 20240105  V1.13:  + sensor capabilities from sensor if version > 1
 20240121  V1.14:  c sensor capabilites RGB was double in screen2
 20240121  V1.15:  + Humi and TempB from breadboard sensor 6
+20240707  V1.16:  c Battery correction factor for Sensor 1
 
 
  */
@@ -93,7 +94,7 @@ extern "C"
 // common data e.g. sensor definitions
 #include <HomeAutomationCommon.h>
 
-const String sSoftware = "HubESPNow V1.15";
+const String sSoftware = "HubESPNow V1.16";
 
 const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
 StaticJsonDocument<capacity> jsonDocument;
@@ -119,7 +120,7 @@ StaticJsonDocument<capacity> jsonDocument;
 
 // used to correct small deviances in sensor reading sensor 0 is local sensor  0.xyz  x=Volt y=0.1Volt z=0.01V3,
 // TODO move this into sensor code to add new sensors with more flexibilitie
-const float fBattCorr[nMaxSensors] = {0, -0.099, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
+const float fBattCorr[nMaxSensors] = {0, -0.11, -0.018, -0.018, -0.018, -0.21, 0, 0, 0, 0};
 const float fTempCorrA[nMaxSensors] = {0, -0.25, 0, 0, 0, 0, 0, 0, 0, 0};
 const float fTempCorrB[nMaxSensors] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const int iAtmoCorr = 3400; // To correct local value to NN
