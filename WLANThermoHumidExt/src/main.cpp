@@ -23,6 +23,7 @@
  20201019   V1.1:   Include DHT_U problem with PIO 5
  20201019   V1.2:   Password sample TEST
  20220108   V1.3:   Rename TempSensAdressen
+ 20240707   V1.4:   TempSensAdressen corrected, configurated for sensor 1, channel and send intervall
 */
 
 #include <Arduino.h>
@@ -59,13 +60,13 @@ const char *APSSID = "";
 
 */
 
-const String sSoftware = "WLANThermoHumiEXT V1.3";
+const String sSoftware = "WLANThermoHumiEXT V1.4";
 
 //Konstanten für WiFi
 #define WIFI_CHANNEL 1
 #define SEND_TIMEOUT 2450 // 245 Millisekunden timeout
-#define CHAN 5            // sensor channel 1 = Developmentboard 2 = ESP gelötet
-#define SLEEP_TIME 90E6   //Zeit in  uS z.B. 5 Minuten entspricht 300E6 normal 90
+#define CHAN 1            // // Sensor 1: Blau/gelb Balkon, Sensor 2 Blau/Grau, sSensor3: Blau/Rot, sSensor6 Breadboard with light sensor, sSensor7 RainSensor
+#define SLEEP_TIME 120E6   //Zeit in  uS z.B. 5 Minuten entspricht 300E6 normal 90
 
 //Pins für Temperatursensor
 const byte bus = 4; //pin GPIO2 (NodeMCU) GPIO4 (ESP12-F Modul) verwenden
@@ -73,7 +74,7 @@ const byte bus = 4; //pin GPIO2 (NodeMCU) GPIO4 (ESP12-F Modul) verwenden
 float fVoltage;
 #define BATCALVOLT 0.01076923073; //Pre Kalibrierung bei VBatt 4,19 V genauer wird es am Empfänger kalibriert
 int cntSens = 0;                  //Anzahl Sensoren
-#define SENSCORR1A -0.3
+#define SENSCORR1A -0.43 //sensor -0.13 before here we saw already -0.3
 
 //Pins für DHT-22
 #define DHTPIN 14     // Digital pin connected to the DHT sensor (3 and 4 won't work)
@@ -116,7 +117,7 @@ void printAddress(DeviceAddress adressen);
 //Array um Sensoradressen zu speichern (DeviceAdress ist bereits ein Array mit 8 Adressen)NEIN stimmt nicht
 DeviceAddress TempSensAdress;
 //Array um Sensoradressen zu speichern TODO Anzahl Sensoren automatisch ermitteln
-//DeviceAddress adressenarray[2];
+DeviceAddress adressen[2];
 
 void setup()
 {
@@ -142,33 +143,33 @@ void setup()
 #endif
 
   //Nun prüfen wir ob einer der Sensoren am Bus ein Temperatur Sensor bis zu 2 werden gelesen
-  if (!sensoren.getAddress(TempSensAdress, 0))
+  if (!sensoren.getAddress(adressen[0], 0))
   {
     Serial.println("0: Kein Temperatursensor vorhanden!");
   }
 //adressen anzeigen
 #ifdef DEBUG
   Serial.print("Adresse1: ");
-  printAddress(adressen);
+  printAddress(adressen[0]);
   Serial.println();
 
   //2. Sensor
-  if (!sensoren.getAddress(adressen, 1))
+  if (!sensoren.getAddress(adressen[1], 1))
   {
     Serial.println("1: Kein Temperatursensor vorhanden!");
   }
 //adressen anzeigen
 
   Serial.print("Adresse2: ");
-  printAddress(adressen);
+  printAddress(adressen[1]);
   Serial.println();
 #endif
 
 #ifdef DEBUG
   //Nun setzen wir noch die gewünschte Auflösung (9, 10, 11 oder 12 bit) TODO das ist nur für den ersten Sensor oder?
-  sensoren.setResolution(adressen, 12);
+  sensoren.setResolution(adressen[0], 12);
   Serial.print("Auflösung = ");
-  Serial.print(sensoren.getResolution(adressen), DEC);
+  Serial.print(sensoren.getResolution(adressen[0]), DEC);
   Serial.println();
 #endif
 

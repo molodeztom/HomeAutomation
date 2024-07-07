@@ -128,7 +128,7 @@ struct SENSOR_DATA
   int iTimeSinceLastRead;         // Minutes count up between sensor readings 0 if a new reading comes in, used for sensor data recieved over ESPNow
 };
 SENSOR_DATA sSensor[nMaxSensors]; //  HomeAutomationCommon.h starts from 0 = local sensor and 1-max are the channels
-// Sensor 1: Breadboard, Sensor 2 Blau/Grau, sSensor3: Blau/Rot, sSensor6 Breadboard with light sensor, sSensor7 RainSensor
+// Sensor 1: Blau/gelb Balkon, Sensor 2 Blau/Grau, sSensor3: Blau/Rot, sSensor6 Breadboard with light sensor, sSensor7 RainSensor
 //  Sensor reading timeout
 long lSensorValidTime = 0;
 // const unsigned long ulOneSecondTimer = 6 * 1000UL; //time in sec
