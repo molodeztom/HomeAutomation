@@ -15,6 +15,7 @@ LoRa WLAN Bridge
   20240530  V0.2: Modify to read instead of send and debug out
   20240530  V0.3: Receive data structure
   20240601  V0.4: Recieve different sensor types
+  20240703  V0.5: Enable WLAN
 
 
 
@@ -23,10 +24,14 @@ LoRa WLAN Bridge
 #include <Arduino.h>
 // 1 means debug on 0 means off
 #define DEBUG 1
+
 #include "LoRa_E32.h"
+#include <PubSubClient.h> //MQTT
+#include <ArduinoJson.h>
 
 // Data structure for message
 #include <HomeAutomationCommon.h>
+
 // debug macro
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -56,7 +61,10 @@ const int ChannelNumber = 7;
 // use hardware serial #1
 LoRa_E32 e32ttl(&Serial1, AUX, M0, M1); // RX, TX
 
-const String sSoftware = "LoraWLANBridge V0.4";
+const String sSoftware = "LoraWLANBridge V0.5";
+//WLAN communication with json 
+const size_t capacity = JSON_OBJECT_SIZE(8) + 256;
+StaticJsonDocument<capacity> jsonDocument;
 
 // put function declarations here:
 
